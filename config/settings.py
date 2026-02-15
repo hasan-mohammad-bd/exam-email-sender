@@ -6,23 +6,34 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _get_config(key: str, default: str = '') -> str:
+    """Get config value from Streamlit secrets (Cloud) or environment variables (local)."""
+    try:
+        import streamlit as st
+        if key in st.secrets:
+            return str(st.secrets[key])
+    except Exception:
+        pass
+    return os.getenv(key, default)
+
+
 class Config:
     # API Configuration
-    API_ENDPOINT = os.getenv('API_ENDPOINT', 'http://localhost:3001/api/auth/generate-login-links')
-    API_KEY = os.getenv('API_KEY', '')
+    API_ENDPOINT = _get_config('API_ENDPOINT', 'http://localhost:3001/api/auth/generate-login-links')
+    API_KEY = _get_config('API_KEY', '')
     API_TIMEOUT = 30
 
     # Email Configuration (AWS SES)
-    AWS_SES_ACCESS_KEY = os.getenv('AWS_SES_ACCESS_KEY', '')
-    AWS_SES_SECRET_KEY = os.getenv('AWS_SES_SECRET_KEY', '')
-    AWS_SES_REGION = os.getenv('AWS_SES_REGION', 'ap-south-1')
-    SENDER_EMAIL = os.getenv('SENDER_EMAIL', 'noreply_gr@ppl.how')
-    SENDER_NAME = os.getenv('SENDER_NAME', 'Exam Portal')
+    AWS_SES_ACCESS_KEY = _get_config('AWS_SES_ACCESS_KEY', '')
+    AWS_SES_SECRET_KEY = _get_config('AWS_SES_SECRET_KEY', '')
+    AWS_SES_REGION = _get_config('AWS_SES_REGION', 'ap-south-1')
+    SENDER_EMAIL = _get_config('SENDER_EMAIL', 'noreply_gr@ppl.how')
+    SENDER_NAME = _get_config('SENDER_NAME', 'Exam Portal')
 
     # Default Values
-    DEFAULT_PROGRAM_ID = os.getenv('DEFAULT_PROGRAM_ID', '')
-    DEFAULT_ROUND_ID = os.getenv('DEFAULT_ROUND_ID', '')
-    DEFAULT_SESSION_TIME = os.getenv('DEFAULT_SESSION_TIME', '730h')
+    DEFAULT_PROGRAM_ID = _get_config('DEFAULT_PROGRAM_ID', '')
+    DEFAULT_ROUND_ID = _get_config('DEFAULT_ROUND_ID', '')
+    DEFAULT_SESSION_TIME = _get_config('DEFAULT_SESSION_TIME', '730h')
 
     # Email Sending Configuration
     DELAY_BETWEEN_EMAILS = 1
