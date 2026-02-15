@@ -71,6 +71,7 @@ def init_session_state():
         'program_id': int(Config.DEFAULT_PROGRAM_ID) if Config.DEFAULT_PROGRAM_ID else 1,
         'round_id': int(Config.DEFAULT_ROUND_ID) if Config.DEFAULT_ROUND_ID else 1,
         'session_time': Config.DEFAULT_SESSION_TIME or '730h',
+        'custom_program_name': '',
         'sender_email': Config.SENDER_EMAIL,
         'sender_name': Config.SENDER_NAME,
         'aws_access_key': Config.AWS_SES_ACCESS_KEY,
@@ -414,6 +415,15 @@ with tab4:
     with col_template:
         st.subheader("✏️ Template Editor")
 
+        # Custom program name override
+        custom_program_name = st.text_input(
+            "Program Name (override)",
+            value=st.session_state.custom_program_name,
+            help="Set a custom program name to replace {program_name} in subject & template. Leave empty to use the name from API.",
+            placeholder="e.g. Software Engineering Assessment"
+        )
+        st.session_state.custom_program_name = custom_program_name
+
         # Email subject
         email_subject = st.text_input(
             "Email Subject",
@@ -449,6 +459,8 @@ with tab4:
         # Preview with sample data
         st.markdown("**Email Preview (with sample data):**")
         sample_data = TemplateManager.get_sample_data()
+        if st.session_state.custom_program_name:
+            sample_data['program_name'] = st.session_state.custom_program_name
 
         # Replace placeholders in subject
         preview_subject = email_subject
@@ -567,6 +579,11 @@ with tab5:
                             f"✅ Sent: {counts['sent']} | ❌ Failed: {counts['failed']} | "
                             f"Last: {status_icon} {email}"
                         )
+
+                    # Override program_name if custom value is set
+                    if st.session_state.custom_program_name:
+                        for s in students_to_email:
+                            s['program_name'] = st.session_state.custom_program_name
 
                     # Send emails
                     results = email_sender.send_bulk_emails(
