@@ -19,7 +19,7 @@ def _get_config(key: str, default: str = '') -> str:
 
 class Config:
     # API Configuration
-    API_ENDPOINT = _get_config('API_ENDPOINT', 'http://localhost:3001/api/auth/generate-login-links')
+    API_ENDPOINT = _get_config('API_ENDPOINT', 'https://api.recruitment.ppl.how/recruitment-demo-backend/api/auth/generate-login-links')
     API_KEY = _get_config('API_KEY', '')
     API_TIMEOUT = 30
 
