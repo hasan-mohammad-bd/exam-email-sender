@@ -2,7 +2,7 @@
 
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, time as dt_time
 import sys
 import os
 import time
@@ -84,9 +84,11 @@ def init_session_state():
         'include_calendar_event': False,
         'calendar_event_type': CalendarEvent.EVENT_TYPE_GOOGLE,
         'calendar_event_title': '',
-        'calendar_event_date': '',
-        'calendar_event_start_time': '',
+        'calendar_event_date': None,
+        'calendar_event_start_time': dt_time(9, 0),
         'calendar_event_duration': '1 hour',
+        'calendar_event_duration_hours': 1,
+        'calendar_event_duration_minutes': 0,
         'calendar_event_organizer_name': '',
         'calendar_event_organizer_email': '',
         'calendar_event_location': '',
@@ -580,28 +582,52 @@ with tab5:
                 )
                 st.session_state.calendar_event_title = ev_title
 
-                ev_date = st.text_input(
-                    "Event Date * (YYYY-MM-DD)",
+                ev_date = st.date_input(
+                    "Event Date *",
                     value=st.session_state.calendar_event_date,
-                    placeholder="e.g. 2026-03-10",
-                    help="Date of the exam session. Format: YYYY-MM-DD or DD/MM/YYYY",
+                    format="YYYY-MM-DD",
+                    help="Select the date of the exam session",
                 )
                 st.session_state.calendar_event_date = ev_date
 
-                ev_start_time = st.text_input(
-                    "Start Time * (HH:MM)",
+                ev_start_time = st.time_input(
+                    "Start Time *",
                     value=st.session_state.calendar_event_start_time,
-                    placeholder="e.g. 10:00 or 14:30",
-                    help="24-hour or 12-hour format, e.g. 10:00, 2:30 PM",
+                    step=300,
+                    help="Select the start time (5-minute increments)",
                 )
                 st.session_state.calendar_event_start_time = ev_start_time
 
-                ev_duration = st.text_input(
-                    "Duration *",
-                    value=st.session_state.calendar_event_duration,
-                    placeholder="e.g. 1 hour, 90 minutes, 1h 30m",
-                    help="Duration of the event",
-                )
+                st.markdown("**Duration \*:**")
+                dur_col_h, dur_col_m = st.columns(2)
+                with dur_col_h:
+                    ev_dur_hours = st.number_input(
+                        "Hours",
+                        min_value=0,
+                        max_value=23,
+                        value=st.session_state.calendar_event_duration_hours,
+                        step=1,
+                    )
+                    st.session_state.calendar_event_duration_hours = ev_dur_hours
+                with dur_col_m:
+                    ev_dur_mins = st.number_input(
+                        "Minutes",
+                        min_value=0,
+                        max_value=55,
+                        value=st.session_state.calendar_event_duration_minutes,
+                        step=5,
+                    )
+                    st.session_state.calendar_event_duration_minutes = ev_dur_mins
+
+                # Compose duration string for the ICS generator
+                if ev_dur_hours > 0 and ev_dur_mins > 0:
+                    ev_duration = f"{ev_dur_hours}h {ev_dur_mins}m"
+                elif ev_dur_hours > 0:
+                    ev_duration = f"{ev_dur_hours}h"
+                elif ev_dur_mins > 0:
+                    ev_duration = f"{ev_dur_mins}m"
+                else:
+                    ev_duration = "1h"  # fallback
                 st.session_state.calendar_event_duration = ev_duration
 
             with ev_col2:
@@ -654,10 +680,8 @@ with tab5:
             missing_event_fields = []
             if not ev_title.strip():
                 missing_event_fields.append("Event Title")
-            if not ev_date.strip():
+            if ev_date is None:
                 missing_event_fields.append("Event Date")
-            if not ev_start_time.strip():
-                missing_event_fields.append("Start Time")
 
             if missing_event_fields:
                 st.warning(f"⚠️ Calendar event is missing: {', '.join(missing_event_fields)}")
@@ -666,8 +690,8 @@ with tab5:
                 _sample_ics, _sample_err = _CE.generate_ics(
                     event_type=event_type_choice,
                     title=ev_title,
-                    date_str=ev_date,
-                    start_time_str=ev_start_time,
+                    date_str=ev_date.strftime('%Y-%m-%d'),
+                    start_time_str=ev_start_time.strftime('%H:%M'),
                     duration_str=ev_duration or '1 hour',
                     organizer_name=ev_organizer_name or st.session_state.sender_name,
                     organizer_email=ev_organizer_email or st.session_state.sender_email,
@@ -683,7 +707,7 @@ with tab5:
                     platform_label = CalendarEvent.get_event_type_label(event_type_choice)
                     st.success(
                         f"✅ Calendar invite ready — **{platform_label}** event "
-                        f"**'{ev_title}'** on **{ev_date}** at **{ev_start_time}** "
+                        f"**'{ev_title}'** on **{ev_date.strftime('%d %b %Y')}** at **{ev_start_time.strftime('%H:%M')}** "
                         f"for **{ev_duration}**. Each recipient will receive a personalised .ics attachment."
                     )
 
@@ -751,8 +775,8 @@ with tab5:
                         cal_config = {
                             'event_type': st.session_state.calendar_event_type,
                             'title': st.session_state.calendar_event_title,
-                            'date_str': st.session_state.calendar_event_date,
-                            'start_time_str': st.session_state.calendar_event_start_time,
+                            'date_str': st.session_state.calendar_event_date.strftime('%Y-%m-%d') if st.session_state.calendar_event_date else '',
+                            'start_time_str': st.session_state.calendar_event_start_time.strftime('%H:%M'),
                             'duration_str': st.session_state.calendar_event_duration or '1 hour',
                             'organizer_name': st.session_state.calendar_event_organizer_name or st.session_state.sender_name,
                             'organizer_email': st.session_state.calendar_event_organizer_email or st.session_state.sender_email,

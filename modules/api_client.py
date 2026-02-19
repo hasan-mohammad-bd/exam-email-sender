@@ -1,10 +1,23 @@
 """API client for generating exam portal links"""
 
 import requests
+from datetime import datetime, timezone
 from typing import List, Dict, Tuple
 
 
 class APIClient:
+
+    @staticmethod
+    def _format_expires_at(raw: str) -> str:
+        """Convert ISO 8601 datetime (e.g. 2026-02-19T05:33:38.427Z) to a readable string."""
+        if not raw or raw == 'N/A':
+            return raw
+        try:
+            # Parse ISO 8601 with optional milliseconds and Z suffix
+            dt = datetime.fromisoformat(raw.replace('Z', '+00:00'))
+            return dt.strftime('%B %d, %Y at %I:%M %p UTC')
+        except (ValueError, AttributeError):
+            return raw
 
     def __init__(self, api_endpoint: str, api_key: str = '', timeout: int = 30):
         self.api_endpoint = api_endpoint
@@ -153,7 +166,7 @@ class APIClient:
                 'email': student['email'],
                 'candidate_id': link_data.get('candidate_id', 'N/A'),
                 'login_link': login_link,
-                'expires_at': link_data.get('expires_at', 'N/A'),
+                'expires_at': APIClient._format_expires_at(link_data.get('expires_at', 'N/A')),
                 'program_name': program_name,
                 'round_name': round_name,
                 'email_status': 'pending',
