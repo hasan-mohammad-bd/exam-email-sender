@@ -268,7 +268,7 @@ with tab2:
             file_name="sample_students.csv",
             mime="text/csv"
         )
-        st.dataframe(sample_df, use_container_width=True)
+        st.dataframe(sample_df, width='stretch')
 
     uploaded_file = st.file_uploader(
         "Choose a CSV or Excel file",
@@ -295,7 +295,7 @@ with tab2:
 
             # Preview
             preview_df = pd.DataFrame(students)
-            st.dataframe(preview_df, use_container_width=True, height=300)
+            st.dataframe(preview_df, width='stretch', height=300)
 
             # Stats
             col1, col2, col3 = st.columns(3)
@@ -312,7 +312,7 @@ with tab2:
         if st.session_state.students:
             st.info(f"📄 Previously loaded: **{len(st.session_state.students)}** student(s)")
             preview_df = pd.DataFrame(st.session_state.students)
-            st.dataframe(preview_df, use_container_width=True, height=200)
+            st.dataframe(preview_df, width='stretch', height=200)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -372,7 +372,7 @@ with tab3:
 
                     st.subheader("📋 Candidates With Links (Will Receive Email)")
                     result_df = pd.DataFrame(students_with_links)
-                    st.dataframe(result_df, use_container_width=True, height=400)
+                    st.dataframe(result_df, width='stretch', height=400)
 
                     csv_data = result_df.to_csv(index=False)
                     st.download_button(
@@ -391,7 +391,7 @@ with tab3:
                     st.warning(f"{len(failed_candidates)} candidate(s) could not be found in the exam portal. No email will be sent to them.")
 
                     failed_df = pd.DataFrame(failed_candidates)
-                    st.dataframe(failed_df, use_container_width=True, height=300)
+                    st.dataframe(failed_df, width='stretch', height=300)
 
                     failed_csv = failed_df.to_csv(index=False)
                     st.download_button(
@@ -410,13 +410,13 @@ with tab3:
                 st.markdown("---")
                 st.subheader("📋 Previously Generated Links")
                 result_df = pd.DataFrame(st.session_state.students_with_links)
-                st.dataframe(result_df, use_container_width=True, height=300)
+                st.dataframe(result_df, width='stretch', height=300)
 
             if st.session_state.failed_candidates:
                 st.markdown("---")
                 st.subheader("🚫 Previously Failed Candidates")
                 failed_df = pd.DataFrame(st.session_state.failed_candidates)
-                st.dataframe(failed_df, use_container_width=True, height=200)
+                st.dataframe(failed_df, width='stretch', height=200)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -540,7 +540,7 @@ with tab5:
         # Preview recipients
         with st.expander(f"👥 Preview Recipients ({len(students_to_email)})"):
             preview_df = pd.DataFrame(students_to_email)[['name', 'email', 'candidate_id', 'login_link']]
-            st.dataframe(preview_df, use_container_width=True)
+            st.dataframe(preview_df, width='stretch')
 
         st.markdown("---")
 
@@ -822,7 +822,7 @@ with tab5:
             results_df = pd.DataFrame(st.session_state.email_results)
             st.dataframe(
                 results_df[['name', 'email', 'email_status', 'email_message', 'send_time']],
-                use_container_width=True
+                width='stretch'
             )
 
 
@@ -851,7 +851,7 @@ with tab6:
                 no_link = len(links_df[links_df['login_link'] == 'N/A'])
                 st.metric("Missing Links", no_link)
 
-            st.dataframe(links_df, use_container_width=True, height=300)
+            st.dataframe(links_df, width='stretch', height=300)
 
             csv_links = links_df.to_csv(index=False)
             st.download_button(
@@ -895,7 +895,7 @@ with tab6:
             st.subheader("📋 Detailed Results")
             display_cols = ['name', 'email', 'candidate_id', 'email_status', 'email_message', 'send_time']
             available_cols = [c for c in display_cols if c in results_df.columns]
-            st.dataframe(results_df[available_cols], use_container_width=True, height=400)
+            st.dataframe(results_df[available_cols], width='stretch', height=400)
 
             # Filter by status
             status_filter = st.selectbox(
@@ -904,7 +904,7 @@ with tab6:
             )
             if status_filter != 'All':
                 filtered_df = results_df[results_df['email_status'] == status_filter]
-                st.dataframe(filtered_df[available_cols], use_container_width=True)
+                st.dataframe(filtered_df[available_cols], width='stretch')
 
             # Download
             csv_results = results_df.to_csv(index=False)
@@ -923,7 +923,7 @@ with tab6:
                 failed_df = results_df[results_df['email_status'] == 'failed']
                 st.dataframe(
                     failed_df[['name', 'email', 'email_message']],
-                    use_container_width=True
+                    width='stretch'
                 )
 
                 failed_csv = failed_df.to_csv(index=False)
