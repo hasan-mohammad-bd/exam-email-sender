@@ -13,6 +13,7 @@ from modules.file_handler import FileHandler
 from modules.api_client import APIClient
 from modules.email_sender import EmailSender
 from modules.template_manager import TemplateManager
+from modules.calendar_event import CalendarEvent
 from config.settings import Config
 
 # Page configuration
@@ -79,6 +80,18 @@ def init_session_state():
         'aws_region': Config.AWS_SES_REGION,
         'api_endpoint': Config.API_ENDPOINT,
         'api_key': Config.API_KEY,
+        # Calendar event options
+        'include_calendar_event': False,
+        'calendar_event_type': CalendarEvent.EVENT_TYPE_GOOGLE,
+        'calendar_event_title': '',
+        'calendar_event_date': '',
+        'calendar_event_start_time': '',
+        'calendar_event_duration': '1 hour',
+        'calendar_event_organizer_name': '',
+        'calendar_event_organizer_email': '',
+        'calendar_event_location': '',
+        'calendar_event_meeting_link': '',
+        'calendar_event_description': '',
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -529,6 +542,153 @@ with tab5:
 
         st.markdown("---")
 
+        # ── Calendar Event Options ─────────────────────────────────────────────
+        st.subheader("📅 Calendar Event (Optional)")
+        st.markdown(
+            "Attach a calendar invite to each email so recipients can add the exam session "
+            "to their calendar. Supported formats: **Google Meet** and **Outlook / Microsoft Teams**."
+        )
+
+        include_event = st.checkbox(
+            "Include calendar event (attach .ics invite to each email)",
+            value=st.session_state.include_calendar_event,
+        )
+        st.session_state.include_calendar_event = include_event
+
+        if include_event:
+            st.markdown("**Select event type:**")
+            event_type_choice = st.radio(
+                "Calendar Platform",
+                options=[CalendarEvent.EVENT_TYPE_GOOGLE, CalendarEvent.EVENT_TYPE_OUTLOOK],
+                format_func=CalendarEvent.get_event_type_label,
+                index=0 if st.session_state.calendar_event_type == CalendarEvent.EVENT_TYPE_GOOGLE else 1,
+                horizontal=True,
+                label_visibility="collapsed",
+            )
+            st.session_state.calendar_event_type = event_type_choice
+
+            st.markdown("**Event Details** *(fill in as plain text)*")
+
+            ev_col1, ev_col2 = st.columns(2)
+
+            with ev_col1:
+                ev_title = st.text_input(
+                    "Event Title *",
+                    value=st.session_state.calendar_event_title,
+                    placeholder="e.g. Software Engineering Exam",
+                    help="Title of the calendar event",
+                )
+                st.session_state.calendar_event_title = ev_title
+
+                ev_date = st.text_input(
+                    "Event Date * (YYYY-MM-DD)",
+                    value=st.session_state.calendar_event_date,
+                    placeholder="e.g. 2026-03-10",
+                    help="Date of the exam session. Format: YYYY-MM-DD or DD/MM/YYYY",
+                )
+                st.session_state.calendar_event_date = ev_date
+
+                ev_start_time = st.text_input(
+                    "Start Time * (HH:MM)",
+                    value=st.session_state.calendar_event_start_time,
+                    placeholder="e.g. 10:00 or 14:30",
+                    help="24-hour or 12-hour format, e.g. 10:00, 2:30 PM",
+                )
+                st.session_state.calendar_event_start_time = ev_start_time
+
+                ev_duration = st.text_input(
+                    "Duration *",
+                    value=st.session_state.calendar_event_duration,
+                    placeholder="e.g. 1 hour, 90 minutes, 1h 30m",
+                    help="Duration of the event",
+                )
+                st.session_state.calendar_event_duration = ev_duration
+
+            with ev_col2:
+                ev_organizer_name = st.text_input(
+                    "Organizer Name",
+                    value=st.session_state.calendar_event_organizer_name or st.session_state.sender_name,
+                    placeholder="e.g. Exam Portal Team",
+                    help="Name of the event organizer (defaults to sender name)",
+                )
+                st.session_state.calendar_event_organizer_name = ev_organizer_name
+
+                ev_organizer_email = st.text_input(
+                    "Organizer Email",
+                    value=st.session_state.calendar_event_organizer_email or st.session_state.sender_email,
+                    placeholder="e.g. exams@yourcompany.com",
+                    help="Organizer's email address (defaults to sender email)",
+                )
+                st.session_state.calendar_event_organizer_email = ev_organizer_email
+
+                ev_meeting_link = st.text_input(
+                    "Meeting Link",
+                    value=st.session_state.calendar_event_meeting_link,
+                    placeholder=(
+                        "e.g. https://meet.google.com/abc-xyz"
+                        if event_type_choice == CalendarEvent.EVENT_TYPE_GOOGLE
+                        else "e.g. https://teams.microsoft.com/..."
+                    ),
+                    help="Video conference URL (Google Meet or Teams link)",
+                )
+                st.session_state.calendar_event_meeting_link = ev_meeting_link
+
+                ev_location = st.text_input(
+                    "Physical Location (optional)",
+                    value=st.session_state.calendar_event_location,
+                    placeholder="e.g. Room 101, Main Building",
+                    help="Physical location or leave blank if online only",
+                )
+                st.session_state.calendar_event_location = ev_location
+
+            ev_description = st.text_area(
+                "Event Description (optional)",
+                value=st.session_state.calendar_event_description,
+                placeholder="e.g. Please join this session for your exam. Make sure you have a stable internet connection.",
+                height=80,
+                help="Additional instructions or notes for attendees",
+            )
+            st.session_state.calendar_event_description = ev_description
+
+            # Validate required fields and show preview
+            missing_event_fields = []
+            if not ev_title.strip():
+                missing_event_fields.append("Event Title")
+            if not ev_date.strip():
+                missing_event_fields.append("Event Date")
+            if not ev_start_time.strip():
+                missing_event_fields.append("Start Time")
+
+            if missing_event_fields:
+                st.warning(f"⚠️ Calendar event is missing: {', '.join(missing_event_fields)}")
+            else:
+                from modules.calendar_event import CalendarEvent as _CE
+                _sample_ics, _sample_err = _CE.generate_ics(
+                    event_type=event_type_choice,
+                    title=ev_title,
+                    date_str=ev_date,
+                    start_time_str=ev_start_time,
+                    duration_str=ev_duration or '1 hour',
+                    organizer_name=ev_organizer_name or st.session_state.sender_name,
+                    organizer_email=ev_organizer_email or st.session_state.sender_email,
+                    attendee_name='Sample Attendee',
+                    attendee_email='sample@example.com',
+                    location=ev_location,
+                    meeting_link=ev_meeting_link,
+                    description=ev_description,
+                )
+                if _sample_err:
+                    st.error(f"❌ Calendar event error: {_sample_err}")
+                else:
+                    platform_label = CalendarEvent.get_event_type_label(event_type_choice)
+                    st.success(
+                        f"✅ Calendar invite ready — **{platform_label}** event "
+                        f"**'{ev_title}'** on **{ev_date}** at **{ev_start_time}** "
+                        f"for **{ev_duration}**. Each recipient will receive a personalised .ics attachment."
+                    )
+
+        st.markdown("---")
+
         # Confirmation
         confirm = st.checkbox(
             f"I confirm sending emails to **{len(students_to_email)}** recipient(s)",
@@ -585,13 +745,30 @@ with tab5:
                         for s in students_to_email:
                             s['program_name'] = st.session_state.custom_program_name
 
+                    # Build calendar event config if enabled
+                    cal_config = None
+                    if st.session_state.include_calendar_event:
+                        cal_config = {
+                            'event_type': st.session_state.calendar_event_type,
+                            'title': st.session_state.calendar_event_title,
+                            'date_str': st.session_state.calendar_event_date,
+                            'start_time_str': st.session_state.calendar_event_start_time,
+                            'duration_str': st.session_state.calendar_event_duration or '1 hour',
+                            'organizer_name': st.session_state.calendar_event_organizer_name or st.session_state.sender_name,
+                            'organizer_email': st.session_state.calendar_event_organizer_email or st.session_state.sender_email,
+                            'location': st.session_state.calendar_event_location,
+                            'meeting_link': st.session_state.calendar_event_meeting_link,
+                            'description': st.session_state.calendar_event_description,
+                        }
+
                     # Send emails
                     results = email_sender.send_bulk_emails(
                         students=students_to_email,
                         subject=st.session_state.email_subject,
                         html_template=st.session_state.email_template,
                         delay=delay_between,
-                        progress_callback=progress_callback
+                        progress_callback=progress_callback,
+                        calendar_event_config=cal_config,
                     )
 
                     st.session_state.email_results = results
