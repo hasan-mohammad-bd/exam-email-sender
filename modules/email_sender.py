@@ -2,9 +2,11 @@
 
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 import time
 import re
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 
 class EmailSender:
@@ -98,24 +100,80 @@ class EmailSender:
         except Exception as e:
             return False, f"Error sending email: {str(e)}"
 
+    def send_email_with_ics(
+        self,
+        recipient_email: str,
+        subject: str,
+        html_body: str,
+        ics_content: str,
+        ics_filename: str = "calendar_event.ics",
+    ) -> Tuple[bool, str]:
+        """Send an email with an ICS calendar attachment via AWS SES send_raw_email."""
+        try:
+            plain_text = re.sub(r'<[^>]+>', '', html_body)
+            plain_text = re.sub(r'\s+', ' ', plain_text).strip()
+
+            source = f"{self.sender_name} <{self.sender_email}>"
+
+            # Build MIME message
+            msg = MIMEMultipart('mixed')
+            msg['Subject'] = subject
+            msg['From'] = source
+            msg['To'] = recipient_email
+
+            # Attach HTML + plain text as alternatives
+            body_part = MIMEMultipart('alternative')
+            body_part.attach(MIMEText(plain_text, 'plain', 'utf-8'))
+            body_part.attach(MIMEText(html_body, 'html', 'utf-8'))
+            msg.attach(body_part)
+
+            # Attach ICS file — use MIMEText so encoding is handled correctly (no duplicate headers)
+            cal_part = MIMEText(ics_content, 'calendar', 'utf-8')
+            cal_part.set_param('method', 'REQUEST')
+            cal_part.add_header('Content-Disposition', 'attachment', filename=ics_filename)
+            msg.attach(cal_part)
+
+            response = self.client.send_raw_email(
+                Source=source,
+                Destinations=[recipient_email],
+                RawMessage={'Data': msg.as_string()},
+            )
+
+            message_id = response.get('MessageId', '')
+            return True, f"Email with calendar invite sent (MessageId: {message_id})"
+
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            error_msg = e.response['Error']['Message']
+            return False, f"AWS SES error ({error_code}): {error_msg}"
+        except Exception as e:
+            return False, f"Error sending email: {str(e)}"
+
     def send_bulk_emails(
         self,
         students: List[Dict],
         subject: str,
         html_template: str,
         delay: float = 1.0,
-        progress_callback=None
+        progress_callback=None,
+        calendar_event_config: Optional[Dict] = None,
     ) -> List[Dict]:
         """
         Send emails to multiple recipients via AWS SES.
 
         For each student:
         1. Replace placeholders in template
-        2. Send email
+        2. Send email (with ICS attachment if calendar_event_config is provided)
         3. Update student dict with email_status
         4. Call progress_callback if provided
         5. Add delay between emails
+
+        calendar_event_config keys:
+            event_type, title, date_str, start_time_str, duration_str,
+            organizer_name, organizer_email, location, meeting_link, description
         """
+        from modules.calendar_event import CalendarEvent
+
         results = []
 
         for i, student in enumerate(students):
@@ -124,11 +182,45 @@ class EmailSender:
             personalized_subject = self._replace_placeholders(subject, student)
 
             # Attempt to send
-            success, message = self.send_email(
-                recipient_email=student['email'],
-                subject=personalized_subject,
-                html_body=personalized_html
-            )
+            if calendar_event_config:
+                # Generate personalized ICS for this student
+                ics_content, ics_error = CalendarEvent.generate_ics(
+                    event_type=calendar_event_config.get('event_type', CalendarEvent.EVENT_TYPE_GOOGLE),
+                    title=calendar_event_config.get('title', 'Exam Session'),
+                    date_str=calendar_event_config.get('date_str', ''),
+                    start_time_str=calendar_event_config.get('start_time_str', ''),
+                    duration_str=calendar_event_config.get('duration_str', '1 hour'),
+                    organizer_name=calendar_event_config.get('organizer_name', self.sender_name),
+                    organizer_email=calendar_event_config.get('organizer_email', self.sender_email),
+                    attendee_name=student.get('name', ''),
+                    attendee_email=student.get('email', ''),
+                    location=calendar_event_config.get('location', ''),
+                    meeting_link=calendar_event_config.get('meeting_link', ''),
+                    description=calendar_event_config.get('description', ''),
+                )
+
+                if ics_error or not ics_content:
+                    success, message = False, f"Calendar event generation failed: {ics_error}"
+                else:
+                    event_type = calendar_event_config.get('event_type', CalendarEvent.EVENT_TYPE_GOOGLE)
+                    ics_filename = (
+                        "google_meet_event.ics"
+                        if event_type == CalendarEvent.EVENT_TYPE_GOOGLE
+                        else "outlook_meeting.ics"
+                    )
+                    success, message = self.send_email_with_ics(
+                        recipient_email=student['email'],
+                        subject=personalized_subject,
+                        html_body=personalized_html,
+                        ics_content=ics_content,
+                        ics_filename=ics_filename,
+                    )
+            else:
+                success, message = self.send_email(
+                    recipient_email=student['email'],
+                    subject=personalized_subject,
+                    html_body=personalized_html,
+                )
 
             # Update student record
             student_result = student.copy()
