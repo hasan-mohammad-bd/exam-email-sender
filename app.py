@@ -14,6 +14,7 @@ from modules.api_client import APIClient
 from modules.email_sender import EmailSender
 from modules.template_manager import TemplateManager
 from modules.calendar_event import CalendarEvent
+from modules.visual_editor import visual_editor
 from config.settings import Config
 
 # Page configuration
@@ -94,6 +95,9 @@ def init_session_state():
         'calendar_event_location': '',
         'calendar_event_meeting_link': '',
         'calendar_event_description': '',
+        # Visual editor state
+        'visual_editor_active': False,
+        'template_editor_key': 0,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -268,7 +272,7 @@ with tab2:
             file_name="sample_students.csv",
             mime="text/csv"
         )
-        st.dataframe(sample_df, width='stretch')
+        st.dataframe(sample_df, use_container_width=True)
 
     uploaded_file = st.file_uploader(
         "Choose a CSV or Excel file",
@@ -295,7 +299,7 @@ with tab2:
 
             # Preview
             preview_df = pd.DataFrame(students)
-            st.dataframe(preview_df, width='stretch', height=300)
+            st.dataframe(preview_df, use_container_width=True, height=300)
 
             # Stats
             col1, col2, col3 = st.columns(3)
@@ -312,7 +316,7 @@ with tab2:
         if st.session_state.students:
             st.info(f"📄 Previously loaded: **{len(st.session_state.students)}** student(s)")
             preview_df = pd.DataFrame(st.session_state.students)
-            st.dataframe(preview_df, width='stretch', height=200)
+            st.dataframe(preview_df, use_container_width=True, height=200)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -372,7 +376,7 @@ with tab3:
 
                     st.subheader("📋 Candidates With Links (Will Receive Email)")
                     result_df = pd.DataFrame(students_with_links)
-                    st.dataframe(result_df, width='stretch', height=400)
+                    st.dataframe(result_df, use_container_width=True, height=400)
 
                     csv_data = result_df.to_csv(index=False)
                     st.download_button(
@@ -391,7 +395,7 @@ with tab3:
                     st.warning(f"{len(failed_candidates)} candidate(s) could not be found in the exam portal. No email will be sent to them.")
 
                     failed_df = pd.DataFrame(failed_candidates)
-                    st.dataframe(failed_df, width='stretch', height=300)
+                    st.dataframe(failed_df, use_container_width=True, height=300)
 
                     failed_csv = failed_df.to_csv(index=False)
                     st.download_button(
@@ -410,13 +414,13 @@ with tab3:
                 st.markdown("---")
                 st.subheader("📋 Previously Generated Links")
                 result_df = pd.DataFrame(st.session_state.students_with_links)
-                st.dataframe(result_df, width='stretch', height=300)
+                st.dataframe(result_df, use_container_width=True, height=300)
 
             if st.session_state.failed_candidates:
                 st.markdown("---")
                 st.subheader("🚫 Previously Failed Candidates")
                 failed_df = pd.DataFrame(st.session_state.failed_candidates)
-                st.dataframe(failed_df, width='stretch', height=200)
+                st.dataframe(failed_df, use_container_width=True, height=200)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -447,12 +451,13 @@ with tab4:
         )
         st.session_state.email_subject = email_subject
 
-        # Template editor
+        # Template editor (key changes when visual editor applies edits)
         email_template = st.text_area(
             "HTML Email Template",
             value=st.session_state.email_template,
             height=500,
-            help="Edit the HTML template. Use placeholders for dynamic content."
+            help="Edit the HTML template. Use placeholders for dynamic content.",
+            key=f"email_template_editor_{st.session_state.template_editor_key}",
         )
         st.session_state.email_template = email_template
 
@@ -465,31 +470,51 @@ with tab4:
     with col_preview:
         st.subheader("👁️ Preview")
 
+        # Toggle between static preview and visual editor
+        visual_mode = st.toggle(
+            "✏️ Visual Editor",
+            value=st.session_state.visual_editor_active,
+            help="Edit text directly in the preview with a floating toolbar",
+        )
+        st.session_state.visual_editor_active = visual_mode
+
         # Available placeholders
         with st.expander("📌 Available Placeholders"):
             placeholders = TemplateManager.get_available_placeholders()
             placeholder_df = pd.DataFrame(placeholders)
             st.table(placeholder_df)
 
-        # Preview with sample data
-        st.markdown("**Email Preview (with sample data):**")
-        sample_data = TemplateManager.get_sample_data()
-        if st.session_state.custom_program_name:
-            sample_data['program_name'] = st.session_state.custom_program_name
+        if visual_mode:
+            # ── Visual WYSIWYG Editor ─────────────────────────────────
+            st.markdown("**Visual Editor** — click text to edit, then press 💾 **Apply Changes**")
+            edited = visual_editor(
+                template_html=st.session_state.email_template,
+                key="visual_editor_component",
+            )
+            if edited is not None and edited != st.session_state.email_template:
+                st.session_state.email_template = edited
+                st.session_state.template_editor_key += 1   # force code editor refresh
+                st.rerun()
+        else:
+            # ── Static Preview ────────────────────────────────────────
+            st.markdown("**Email Preview (with sample data):**")
+            sample_data = TemplateManager.get_sample_data()
+            if st.session_state.custom_program_name:
+                sample_data['program_name'] = st.session_state.custom_program_name
 
-        # Replace placeholders in subject
-        preview_subject = email_subject
-        for key, value in sample_data.items():
-            preview_subject = preview_subject.replace(f'{{{key}}}', str(value))
+            # Replace placeholders in subject
+            preview_subject = email_subject
+            for key, value in sample_data.items():
+                preview_subject = preview_subject.replace(f'{{{key}}}', str(value))
 
-        st.markdown(f"**Subject:** {preview_subject}")
+            st.markdown(f"**Subject:** {preview_subject}")
 
-        # Replace placeholders in template
-        preview_html = email_template
-        for key, value in sample_data.items():
-            preview_html = preview_html.replace(f'{{{key}}}', str(value))
+            # Replace placeholders in template
+            preview_html = email_template
+            for key, value in sample_data.items():
+                preview_html = preview_html.replace(f'{{{key}}}', str(value))
 
-        st.components.v1.html(preview_html, height=600, scrolling=True)
+            st.components.v1.html(preview_html, height=600, scrolling=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -530,17 +555,17 @@ with tab5:
         st.subheader("⚙️ Sending Settings")
         delay_between = st.slider(
             "Delay between emails (seconds)",
-            min_value=0.5,
+            min_value=0.01,
             max_value=10.0,
             value=float(Config.DELAY_BETWEEN_EMAILS),
-            step=0.5,
+            step=0.01,
             help="Time to wait between sending each email (to avoid rate limits)"
         )
 
         # Preview recipients
         with st.expander(f"👥 Preview Recipients ({len(students_to_email)})"):
             preview_df = pd.DataFrame(students_to_email)[['name', 'email', 'candidate_id', 'login_link']]
-            st.dataframe(preview_df, width='stretch')
+            st.dataframe(preview_df, use_container_width=True)
 
         st.markdown("---")
 
@@ -822,7 +847,7 @@ with tab5:
             results_df = pd.DataFrame(st.session_state.email_results)
             st.dataframe(
                 results_df[['name', 'email', 'email_status', 'email_message', 'send_time']],
-                width='stretch'
+                use_container_width=True
             )
 
 
@@ -851,7 +876,7 @@ with tab6:
                 no_link = len(links_df[links_df['login_link'] == 'N/A'])
                 st.metric("Missing Links", no_link)
 
-            st.dataframe(links_df, width='stretch', height=300)
+            st.dataframe(links_df, use_container_width=True, height=300)
 
             csv_links = links_df.to_csv(index=False)
             st.download_button(
@@ -895,7 +920,7 @@ with tab6:
             st.subheader("📋 Detailed Results")
             display_cols = ['name', 'email', 'candidate_id', 'email_status', 'email_message', 'send_time']
             available_cols = [c for c in display_cols if c in results_df.columns]
-            st.dataframe(results_df[available_cols], width='stretch', height=400)
+            st.dataframe(results_df[available_cols], use_container_width=True, height=400)
 
             # Filter by status
             status_filter = st.selectbox(
@@ -904,7 +929,7 @@ with tab6:
             )
             if status_filter != 'All':
                 filtered_df = results_df[results_df['email_status'] == status_filter]
-                st.dataframe(filtered_df[available_cols], width='stretch')
+                st.dataframe(filtered_df[available_cols], use_container_width=True)
 
             # Download
             csv_results = results_df.to_csv(index=False)
@@ -923,7 +948,7 @@ with tab6:
                 failed_df = results_df[results_df['email_status'] == 'failed']
                 st.dataframe(
                     failed_df[['name', 'email', 'email_message']],
-                    width='stretch'
+                    use_container_width=True
                 )
 
                 failed_csv = failed_df.to_csv(index=False)

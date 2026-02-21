@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #e8e8e8;
+        }
+
+        /* ── Floating Toolbar ─────────────────────────────────────────── */
+        .editor-toolbar {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.97);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 2px solid #e0e0e0;
+            padding: 5px 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2px;
+            align-items: center;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .toolbar-group {
+            display: flex;
+            gap: 1px;
+            padding: 0 5px;
+            border-right: 1px solid #e8e8e8;
+            align-items: center;
+        }
+
+        .toolbar-group:last-child { border-right: none; }
+
+        .toolbar-btn {
+            border: none;
+            background: transparent;
+            padding: 4px 7px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #555;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 26px;
+            height: 26px;
+            position: relative;
+        }
+
+        .toolbar-btn:hover { background: #f0f0f0; color: #222; }
+        .toolbar-btn:active { background: #e0e0e0; }
+
+        .toolbar-select {
+            border: 1px solid #ddd;
+            background: white;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-size: 11px;
+            color: #555;
+            cursor: pointer;
+            height: 26px;
+        }
+
+        .toolbar-color {
+            width: 24px;
+            height: 24px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            padding: 0;
+            background: transparent;
+        }
+
+        .toolbar-color::-webkit-color-swatch-wrapper { padding: 1px; }
+        .toolbar-color::-webkit-color-swatch { border: none; border-radius: 2px; }
+
+        .apply-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+            color: white !important;
+            font-weight: 600;
+            padding: 4px 12px !important;
+            font-size: 11px !important;
+            border-radius: 6px !important;
+            gap: 4px;
+            letter-spacing: 0.3px;
+            box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
+        }
+
+        .apply-btn:hover {
+            background: linear-gradient(135deg, #5a6fd6 0%, #6a4196 100%) !important;
+            box-shadow: 0 3px 10px rgba(102, 126, 234, 0.4);
+            transform: translateY(-1px);
+        }
+
+        /* ── Alignment Icons ──────────────────────────────────────────── */
+        .align-icon {
+            display: inline-flex;
+            flex-direction: column;
+            gap: 2px;
+            width: 14px;
+        }
+
+        .align-icon i {
+            display: block;
+            height: 2px;
+            background: currentColor;
+            border-radius: 1px;
+            font-style: normal;
+        }
+
+        .align-left i:nth-child(1) { width: 100%; }
+        .align-left i:nth-child(2) { width: 65%; }
+        .align-left i:nth-child(3) { width: 80%; }
+
+        .align-center i:nth-child(1) { width: 90%; margin: 0 auto; }
+        .align-center i:nth-child(2) { width: 60%; margin: 0 auto; }
+        .align-center i:nth-child(3) { width: 80%; margin: 0 auto; }
+
+        .align-right i:nth-child(1) { width: 100%; margin-left: auto; }
+        .align-right i:nth-child(2) { width: 65%; margin-left: auto; }
+        .align-right i:nth-child(3) { width: 80%; margin-left: auto; }
+
+        /* ── Editable Canvas ──────────────────────────────────────────── */
+        .editor-canvas {
+            padding: 20px;
+            background: #e8e8e8;
+            min-height: 300px;
+        }
+
+        #editable-content {
+            outline: none;
+            cursor: text;
+            transition: box-shadow 0.2s ease;
+        }
+
+        #editable-content:focus {
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+            border-radius: 10px;
+        }
+
+        /* ── Placeholder Tags ─────────────────────────────────────────── */
+        .tpl-placeholder {
+            background: linear-gradient(135deg, #e8f0fe, #d2e3fc);
+            color: #1a73e8;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 0.85em;
+            border: 1px solid #aecbfa;
+            cursor: default;
+            user-select: none;
+            white-space: nowrap;
+            display: inline;
+            line-height: 1.6;
+        }
+
+        /* ── Toast Notification ───────────────────────────────────────── */
+        .toast {
+            position: fixed;
+            top: 50px;
+            right: 16px;
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            z-index: 2000;
+            opacity: 0;
+            transform: translateY(-8px);
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            pointer-events: none;
+        }
+
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .toast.info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .toast.warning { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+
+        /* ── Hint Bar ─────────────────────────────────────────────────── */
+        .hint-bar {
+            background: #fffde7;
+            color: #6d5e00;
+            font-size: 11px;
+            padding: 4px 12px;
+            text-align: center;
+            border-bottom: 1px solid #f0e68c;
+        }
+
+        .hint-bar kbd {
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            padding: 1px 5px;
+            font-family: inherit;
+            font-size: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Toolbar -->
+    <div class="editor-toolbar" id="toolbar">
+        <!-- Undo / Redo -->
+        <div class="toolbar-group">
+            <button class="toolbar-btn" onclick="exec('undo')" title="Undo">↩</button>
+            <button class="toolbar-btn" onclick="exec('redo')" title="Redo">↪</button>
+        </div>
+
+        <!-- Text Format -->
+        <div class="toolbar-group">
+            <button class="toolbar-btn" onclick="exec('bold')" title="Bold"><b>B</b></button>
+            <button class="toolbar-btn" onclick="exec('italic')" title="Italic"><i>I</i></button>
+            <button class="toolbar-btn" onclick="exec('underline')" title="Underline"><u>U</u></button>
+            <button class="toolbar-btn" onclick="exec('strikeThrough')" title="Strikethrough"><s>S</s></button>
+        </div>
+
+        <!-- Font Size -->
+        <div class="toolbar-group">
+            <select class="toolbar-select" onchange="exec('fontSize', this.value); this.selectedIndex=0;" title="Font Size">
+                <option value="" disabled selected>Size</option>
+                <option value="1">Tiny</option>
+                <option value="2">Small</option>
+                <option value="3">Normal</option>
+                <option value="4">Medium</option>
+                <option value="5">Large</option>
+                <option value="6">X-Large</option>
+                <option value="7">Huge</option>
+            </select>
+        </div>
+
+        <!-- Colors -->
+        <div class="toolbar-group">
+            <label title="Text Color" style="display:flex;align-items:center;gap:2px;cursor:pointer;font-size:11px;color:#555;">
+                A <input type="color" class="toolbar-color" value="#333333" onchange="exec('foreColor', this.value)">
+            </label>
+            <label title="Highlight" style="display:flex;align-items:center;gap:2px;cursor:pointer;font-size:11px;color:#555;">
+                🖍 <input type="color" class="toolbar-color" value="#ffff00" onchange="exec('hiliteColor', this.value)">
+            </label>
+        </div>
+
+        <!-- Alignment -->
+        <div class="toolbar-group">
+            <button class="toolbar-btn" onclick="exec('justifyLeft')" title="Align Left">
+                <span class="align-icon align-left"><i></i><i></i><i></i></span>
+            </button>
+            <button class="toolbar-btn" onclick="exec('justifyCenter')" title="Center">
+                <span class="align-icon align-center"><i></i><i></i><i></i></span>
+            </button>
+            <button class="toolbar-btn" onclick="exec('justifyRight')" title="Align Right">
+                <span class="align-icon align-right"><i></i><i></i><i></i></span>
+            </button>
+        </div>
+
+        <!-- Lists -->
+        <div class="toolbar-group">
+            <button class="toolbar-btn" onclick="exec('insertUnorderedList')" title="Bullet List" style="font-size:15px;">•⁝</button>
+            <button class="toolbar-btn" onclick="exec('insertOrderedList')" title="Numbered List" style="font-size:11px;font-weight:600;">1.</button>
+        </div>
+
+        <!-- Insert -->
+        <div class="toolbar-group">
+            <button class="toolbar-btn" onclick="insertLink()" title="Insert / Edit Link" style="font-size:12px;">🔗</button>
+            <button class="toolbar-btn" onclick="exec('removeFormat')" title="Clear Formatting" style="font-size:12px;">⊘</button>
+        </div>
+
+        <!-- Apply (right-aligned) -->
+        <div class="toolbar-group" style="border-right:none;margin-left:auto;">
+            <button class="toolbar-btn apply-btn" onclick="applyChanges()" title="Apply changes to template (Ctrl+S)">
+                💾 Apply Changes
+            </button>
+        </div>
+    </div>
+
+    <!-- Hint -->
+    <div class="hint-bar">
+        Click on any text to edit &nbsp;·&nbsp; <kbd>Ctrl</kbd>+<kbd>S</kbd> to apply &nbsp;·&nbsp;
+        Blue tags like <span class="tpl-placeholder" style="font-size:10px;">{name}</span> are placeholders — they stay intact
+    </div>
+
+    <!-- Template styles (injected dynamically) -->
+    <style id="template-styles"></style>
+
+    <!-- Editable content -->
+    <div class="editor-canvas">
+        <div id="editable-content" contenteditable="true" spellcheck="true">
+            <p style="color:#999;text-align:center;padding:40px;">Loading editor…</p>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script>
+        /* ── Streamlit Component Interface (minimal) ───────────────── */
+        function sendMsg(type, data) {
+            window.parent.postMessage(
+                Object.assign({ isStreamlitMessage: true, type: type }, data),
+                "*"
+            );
+        }
+
+        function init()           { sendMsg("streamlit:componentReady", { apiVersion: 1 }); }
+        function setHeight(h)     { sendMsg("streamlit:setFrameHeight", { height: h }); }
+        function sendValue(val)   { sendMsg("streamlit:setComponentValue", { value: val }); }
+
+        /* ── State ─────────────────────────────────────────────────── */
+        let lastBody = null;
+        let dirty    = false;
+
+        /* ── Receive render events from Streamlit ──────────────────── */
+        window.addEventListener("message", (e) => {
+            if (e.data.type !== "streamlit:render") return;
+            const a = e.data.args || {};
+
+            // Apply template styles
+            document.getElementById("template-styles").textContent = a.styles || "";
+
+            // Update body only on first load or external change (no unsaved edits)
+            const body = a.body_html || "";
+            if (lastBody === null || (!dirty && body !== lastBody)) {
+                document.getElementById("editable-content").innerHTML = body;
+                lastBody = body;
+            }
+
+            // Resize frame
+            requestAnimationFrame(resizeFrame);
+        });
+
+        /* ── Toolbar commands ──────────────────────────────────────── */
+        function exec(cmd, val) {
+            document.execCommand(cmd, false, val || null);
+            document.getElementById("editable-content").focus();
+        }
+
+        function insertLink() {
+            const sel = window.getSelection();
+            const existing = sel && sel.anchorNode
+                ? sel.anchorNode.parentElement.closest("a")
+                : null;
+            const url = prompt("Enter URL:", existing ? existing.href : "https://");
+            if (url === null) return;                 // cancelled
+            if (url === "" && existing) { exec("unlink"); return; }  // remove link
+            if (url) exec("createLink", url);
+        }
+
+        /* ── Track edits ───────────────────────────────────────────── */
+        const editor = document.getElementById("editable-content");
+        editor.addEventListener("input", () => { dirty = true; });
+
+        // Prevent link navigation inside the editor
+        editor.addEventListener("click", (e) => {
+            const link = e.target.closest("a");
+            if (link) e.preventDefault();
+        });
+
+        /* ── Apply changes ─────────────────────────────────────────── */
+        function applyChanges() {
+            const html = document.getElementById("editable-content").innerHTML;
+            sendValue({ body_html: html });
+            lastBody = html;
+            dirty = false;
+            toast("✅ Changes applied to template!", "success");
+        }
+
+        /* ── Toast ─────────────────────────────────────────────────── */
+        function toast(msg, type) {
+            const el = document.createElement("div");
+            el.className = "toast " + (type || "success");
+            el.textContent = msg;
+            document.getElementById("toast-container").appendChild(el);
+            requestAnimationFrame(() => el.classList.add("show"));
+            setTimeout(() => {
+                el.classList.remove("show");
+                setTimeout(() => el.remove(), 300);
+            }, 2500);
+        }
+
+        /* ── Keyboard shortcuts ────────────────────────────────────── */
+        document.addEventListener("keydown", (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+                e.preventDefault();
+                applyChanges();
+            }
+        });
+
+        /* ── Auto-resize ───────────────────────────────────────────── */
+        function resizeFrame() {
+            setHeight(document.body.scrollHeight + 10);
+        }
+        new ResizeObserver(resizeFrame).observe(editor);
+
+        /* ── Boot ──────────────────────────────────────────────────── */
+        init();
+    </script>
+</body>
+</html>

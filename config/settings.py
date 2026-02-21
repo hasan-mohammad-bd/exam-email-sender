@@ -36,6 +36,6 @@ class Config:
     DEFAULT_SESSION_TIME = _get_config('DEFAULT_SESSION_TIME', '730h')
 
     # Email Sending Configuration
-    DELAY_BETWEEN_EMAILS = 1
+    DELAY_BETWEEN_EMAILS = 0.01
     BATCH_SIZE = 50
     MAX_RETRIES = 3
