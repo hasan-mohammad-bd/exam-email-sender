@@ -24,11 +24,11 @@ class Config:
     API_TIMEOUT = 30
 
     # Email Configuration (AWS SES)
-    AWS_SES_ACCESS_KEY = _get_config('AWS_SES_ACCESS_KEY', 'AKIA57VDLNVTSM65BU5O')
+    AWS_SES_ACCESS_KEY = _get_config('AWS_SES_ACCESS_KEY', 'AKIARMFUJ23BY2CYI4ZJ')
     AWS_SES_SECRET_KEY = _get_config('AWS_SES_SECRET_KEY', '')
     AWS_SES_REGION = _get_config('AWS_SES_REGION', 'ap-southeast-1')
-    SENDER_EMAIL = _get_config('SENDER_EMAIL', 'noreply_gr@ppl.how')
-    SENDER_NAME = _get_config('SENDER_NAME', 'Exam Portal')
+    SENDER_EMAIL = _get_config('SENDER_EMAIL', 'citybank.recruitment@v2.ltd')
+    SENDER_NAME = _get_config('SENDER_NAME', 'City Bank Recruitment Team')
 
     # Default Values
     DEFAULT_PROGRAM_ID = _get_config('DEFAULT_PROGRAM_ID', '')
