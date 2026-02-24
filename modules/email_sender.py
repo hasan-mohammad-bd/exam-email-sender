@@ -48,44 +48,125 @@ class EmailSender:
         except Exception as e:
             return False, f"Connection error: {str(e)}"
 
+    def _build_raw_email(
+        self,
+        recipient_email: str,
+        subject: str,
+        html_body: str,
+        cc_emails: Optional[List[str]] = None,
+        ics_content: Optional[str] = None,
+        ics_filename: str = "calendar_event.ics",
+    ) -> str:
+        """Build a raw MIME email string."""
+        plain_text = re.sub(r'<[^>]+>', '', html_body)
+        plain_text = re.sub(r'\s+', ' ', plain_text).strip()
+        source = f"{self.sender_name} <{self.sender_email}>"
+
+        if ics_content:
+            msg = MIMEMultipart('mixed')
+            body_part = MIMEMultipart('alternative')
+            body_part.attach(MIMEText(plain_text, 'plain', 'utf-8'))
+            body_part.attach(MIMEText(html_body, 'html', 'utf-8'))
+            msg.attach(body_part)
+            cal_part = MIMEText(ics_content, 'calendar', 'utf-8')
+            cal_part.set_param('method', 'REQUEST')
+            cal_part.add_header('Content-Disposition', 'attachment', filename=ics_filename)
+            msg.attach(cal_part)
+        else:
+            msg = MIMEMultipart('alternative')
+            msg.attach(MIMEText(plain_text, 'plain', 'utf-8'))
+            msg.attach(MIMEText(html_body, 'html', 'utf-8'))
+
+        msg['Subject'] = subject
+        msg['From'] = source
+        msg['To'] = recipient_email
+        if cc_emails:
+            msg['Cc'] = ', '.join(cc_emails)
+
+        return msg.as_string()
+
+    def _send_raw(
+        self,
+        raw_message: str,
+        destinations: List[str],
+    ) -> Tuple[bool, str]:
+        """Send a raw MIME message via SES."""
+        source = f"{self.sender_name} <{self.sender_email}>"
+        response = self.client.send_raw_email(
+            Source=source,
+            Destinations=destinations,
+            RawMessage={'Data': raw_message},
+        )
+        message_id = response.get('MessageId', '')
+        return True, message_id
+
+    def _send_bcc_copies(
+        self,
+        recipient_email: str,
+        subject: str,
+        html_body: str,
+        bcc_emails: List[str],
+        ics_content: Optional[str] = None,
+        ics_filename: str = "calendar_event.ics",
+    ) -> List[Tuple[str, bool, str]]:
+        """
+        Send individual copies to each BCC recipient.
+        Each BCC recipient receives their own email where they can see
+        themselves in the 'To' header (alongside the original recipient).
+        AWS SES strips the Bcc header, so this is the only way for
+        BCC recipients to know they received a copy.
+        """
+        results = []
+        for bcc_addr in bcc_emails:
+            try:
+                # Build a separate email for this BCC recipient
+                # To header shows: "original_recipient, bcc_recipient (BCC)"
+                bcc_to = f"{recipient_email}, {bcc_addr} (BCC)"
+                raw = self._build_raw_email(
+                    recipient_email=bcc_to,
+                    subject=subject,
+                    html_body=html_body,
+                    ics_content=ics_content,
+                    ics_filename=ics_filename,
+                )
+                ok, mid = self._send_raw(raw, [bcc_addr])
+                results.append((bcc_addr, ok, f"BCC copy sent (MessageId: {mid})"))
+            except Exception as e:
+                results.append((bcc_addr, False, f"BCC copy failed for {bcc_addr}: {e}"))
+        return results
+
     def send_email(
         self,
         recipient_email: str,
         subject: str,
-        html_body: str
+        html_body: str,
+        cc_emails: Optional[List[str]] = None,
+        bcc_emails: Optional[List[str]] = None,
     ) -> Tuple[bool, str]:
-        """Send a single email via AWS SES"""
+        """Send a single email via AWS SES using send_raw_email."""
         try:
-            # Create plain text version by stripping HTML
-            plain_text = re.sub(r'<[^>]+>', '', html_body)
-            plain_text = re.sub(r'\s+', ' ', plain_text).strip()
-
-            source = f"{self.sender_name} <{self.sender_email}>"
-
-            response = self.client.send_email(
-                Source=source,
-                Destination={
-                    'ToAddresses': [recipient_email],
-                },
-                Message={
-                    'Subject': {
-                        'Data': subject,
-                        'Charset': 'UTF-8',
-                    },
-                    'Body': {
-                        'Text': {
-                            'Data': plain_text,
-                            'Charset': 'UTF-8',
-                        },
-                        'Html': {
-                            'Data': html_body,
-                            'Charset': 'UTF-8',
-                        },
-                    },
-                },
+            # Build and send the main email (To + CC)
+            raw = self._build_raw_email(
+                recipient_email=recipient_email,
+                subject=subject,
+                html_body=html_body,
+                cc_emails=cc_emails,
             )
+            destinations = [recipient_email]
+            if cc_emails:
+                destinations.extend(cc_emails)
 
-            message_id = response.get('MessageId', '')
+            ok, message_id = self._send_raw(raw, destinations)
+
+            # Send individual copies to BCC recipients
+            if bcc_emails:
+                self._send_bcc_copies(
+                    recipient_email=recipient_email,
+                    subject=subject,
+                    html_body=html_body,
+                    bcc_emails=bcc_emails,
+                )
+
             return True, f"Email sent (MessageId: {message_id})"
 
         except ClientError as e:
@@ -107,39 +188,37 @@ class EmailSender:
         html_body: str,
         ics_content: str,
         ics_filename: str = "calendar_event.ics",
+        cc_emails: Optional[List[str]] = None,
+        bcc_emails: Optional[List[str]] = None,
     ) -> Tuple[bool, str]:
         """Send an email with an ICS calendar attachment via AWS SES send_raw_email."""
         try:
-            plain_text = re.sub(r'<[^>]+>', '', html_body)
-            plain_text = re.sub(r'\s+', ' ', plain_text).strip()
-
-            source = f"{self.sender_name} <{self.sender_email}>"
-
-            # Build MIME message
-            msg = MIMEMultipart('mixed')
-            msg['Subject'] = subject
-            msg['From'] = source
-            msg['To'] = recipient_email
-
-            # Attach HTML + plain text as alternatives
-            body_part = MIMEMultipart('alternative')
-            body_part.attach(MIMEText(plain_text, 'plain', 'utf-8'))
-            body_part.attach(MIMEText(html_body, 'html', 'utf-8'))
-            msg.attach(body_part)
-
-            # Attach ICS file — use MIMEText so encoding is handled correctly (no duplicate headers)
-            cal_part = MIMEText(ics_content, 'calendar', 'utf-8')
-            cal_part.set_param('method', 'REQUEST')
-            cal_part.add_header('Content-Disposition', 'attachment', filename=ics_filename)
-            msg.attach(cal_part)
-
-            response = self.client.send_raw_email(
-                Source=source,
-                Destinations=[recipient_email],
-                RawMessage={'Data': msg.as_string()},
+            # Build and send the main email (To + CC)
+            raw = self._build_raw_email(
+                recipient_email=recipient_email,
+                subject=subject,
+                html_body=html_body,
+                cc_emails=cc_emails,
+                ics_content=ics_content,
+                ics_filename=ics_filename,
             )
+            destinations = [recipient_email]
+            if cc_emails:
+                destinations.extend(cc_emails)
 
-            message_id = response.get('MessageId', '')
+            ok, message_id = self._send_raw(raw, destinations)
+
+            # Send individual copies to BCC recipients
+            if bcc_emails:
+                self._send_bcc_copies(
+                    recipient_email=recipient_email,
+                    subject=subject,
+                    html_body=html_body,
+                    bcc_emails=bcc_emails,
+                    ics_content=ics_content,
+                    ics_filename=ics_filename,
+                )
+
             return True, f"Email with calendar invite sent (MessageId: {message_id})"
 
         except ClientError as e:
@@ -157,6 +236,8 @@ class EmailSender:
         delay: float = 1.0,
         progress_callback=None,
         calendar_event_config: Optional[Dict] = None,
+        cc_emails: Optional[List[str]] = None,
+        bcc_emails: Optional[List[str]] = None,
     ) -> List[Dict]:
         """
         Send emails to multiple recipients via AWS SES.
@@ -214,12 +295,16 @@ class EmailSender:
                         html_body=personalized_html,
                         ics_content=ics_content,
                         ics_filename=ics_filename,
+                        cc_emails=cc_emails,
+                        bcc_emails=bcc_emails,
                     )
             else:
                 success, message = self.send_email(
                     recipient_email=student['email'],
                     subject=personalized_subject,
                     html_body=personalized_html,
+                    cc_emails=cc_emails,
+                    bcc_emails=bcc_emails,
                 )
 
             # Update student record

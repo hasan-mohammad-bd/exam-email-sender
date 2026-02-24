@@ -97,6 +97,9 @@ def init_session_state():
         'calendar_event_description': '',
         # Email mode - skip link generation
         'skip_link_generation': False,
+        # CC / BCC
+        'cc_emails': '',
+        'bcc_emails': '',
         # Visual editor state
         'visual_editor_active': False,
         'template_editor_key': 0,
@@ -619,6 +622,10 @@ with tab5:
             st.markdown(f"☁️ **Service:** AWS SES ({st.session_state.aws_region})")
             st.markdown(f"📝 **Subject:** {st.session_state.email_subject}")
             st.markdown(f"⏱️ **Delay between emails:** {Config.DELAY_BETWEEN_EMAILS}s")
+            if st.session_state.cc_emails.strip():
+                st.markdown(f"📋 **CC:** {st.session_state.cc_emails.strip()}")
+            if st.session_state.bcc_emails.strip():
+                st.markdown(f"📋 **BCC:** {st.session_state.bcc_emails.strip()}")
 
         st.markdown("---")
 
@@ -632,6 +639,28 @@ with tab5:
             step=0.01,
             help="Time to wait between sending each email (to avoid rate limits)"
         )
+
+        # CC / BCC fields
+        st.markdown("**CC / BCC (Optional)**")
+        cc_col, bcc_col = st.columns(2)
+        with cc_col:
+            cc_emails_input = st.text_area(
+                "CC Email Addresses",
+                value=st.session_state.cc_emails,
+                placeholder="e.g. manager@example.com, hr@example.com",
+                help="Comma-separated list of email addresses to CC on every email",
+                height=80,
+            )
+            st.session_state.cc_emails = cc_emails_input
+        with bcc_col:
+            bcc_emails_input = st.text_area(
+                "BCC Email Addresses",
+                value=st.session_state.bcc_emails,
+                placeholder="e.g. audit@example.com, records@example.com",
+                help="Comma-separated list of email addresses to BCC on every email (recipients won't see these)",
+                height=80,
+            )
+            st.session_state.bcc_emails = bcc_emails_input
 
         # Preview recipients
         with st.expander(f"👥 Preview Recipients ({len(students_to_email)})"):
@@ -885,6 +914,10 @@ with tab5:
                         }
 
                     # Send emails
+                    # Parse CC / BCC
+                    cc_list = [e.strip() for e in st.session_state.cc_emails.split(',') if e.strip()] if st.session_state.cc_emails.strip() else None
+                    bcc_list = [e.strip() for e in st.session_state.bcc_emails.split(',') if e.strip()] if st.session_state.bcc_emails.strip() else None
+
                     results = email_sender.send_bulk_emails(
                         students=students_to_email,
                         subject=st.session_state.email_subject,
@@ -892,6 +925,8 @@ with tab5:
                         delay=delay_between,
                         progress_callback=progress_callback,
                         calendar_event_config=cal_config,
+                        cc_emails=cc_list,
+                        bcc_emails=bcc_list,
                     )
 
                     st.session_state.email_results = results
