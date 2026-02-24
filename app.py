@@ -513,7 +513,7 @@ with tab4:
         # Available placeholders
         with st.expander("📌 Available Placeholders"):
             placeholders = TemplateManager.get_available_placeholders(
-                general_mode=st.session_state.skip_link_generation
+                st.session_state.get('skip_link_generation', False)
             )
             placeholder_df = pd.DataFrame(placeholders)
             st.table(placeholder_df)
@@ -533,7 +533,7 @@ with tab4:
             # ── Static Preview ────────────────────────────────────────
             st.markdown("**Email Preview (with sample data):**")
             sample_data = TemplateManager.get_sample_data(
-                general_mode=st.session_state.skip_link_generation
+                st.session_state.get('skip_link_generation', False)
             )
             if st.session_state.custom_program_name:
                 sample_data['program_name'] = st.session_state.custom_program_name
