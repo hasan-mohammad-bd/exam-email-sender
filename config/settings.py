@@ -27,6 +27,7 @@ class Config:
     AWS_SES_ACCESS_KEY = _get_config('AWS_SES_ACCESS_KEY', 'AKIARMFUJ23BY2CYI4ZJ')
     AWS_SES_SECRET_KEY = _get_config('AWS_SES_SECRET_KEY', '')
     AWS_SES_REGION = _get_config('AWS_SES_REGION', 'ap-southeast-1')
+    AWS_SES_CONFIGURATION_SET = _get_config('AWS_SES_CONFIGURATION_SET', 'CitybankEmailTracking')
     SENDER_EMAIL = _get_config('SENDER_EMAIL', 'citybank.recruitment@v2.ltd')
     SENDER_NAME = _get_config('SENDER_NAME', 'City Bank Recruitment Team')
 

@@ -15,6 +15,7 @@ from modules.email_sender import EmailSender
 from modules.template_manager import TemplateManager
 from modules.calendar_event import CalendarEvent
 from modules.visual_editor import visual_editor
+from modules.email_tracking import EmailTracker
 from config.settings import Config
 
 # Page configuration
@@ -130,22 +131,24 @@ st.markdown("---")
 
 # ─── Create tabs ─────────────────────────────────────────────────────────────
 if skip_link_generation:
-    tab1, tab2, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab4, tab5, tab6, tab7 = st.tabs([
         "1️⃣ Email Settings",
         "2️⃣ Upload Data",
         "3️⃣ Email Template",
         "4️⃣ Send Emails",
-        "5️⃣ Reports"
+        "5️⃣ Reports",
+        "6️⃣ Email Tracking"
     ])
     tab3 = None  # No generate links tab
 else:
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "1️⃣ API Parameters",
         "2️⃣ Upload Data",
         "3️⃣ Generate Links",
         "4️⃣ Email Template",
         "5️⃣ Send Emails",
-        "6️⃣ Reports"
+        "6️⃣ Reports",
+        "7️⃣ Email Tracking"
     ])
 
 
@@ -254,6 +257,7 @@ with tab1:
                 'aws_region': aws_region,
                 'sender_email': sender_email,
                 'sender_name': sender_name,
+                'configuration_set': Config.AWS_SES_CONFIGURATION_SET,
             }
             with st.spinner("Testing AWS SES connection..."):
                 email_sender = EmailSender(ses_config)
@@ -828,6 +832,7 @@ with tab5:
                     'aws_region': st.session_state.aws_region,
                     'sender_email': st.session_state.sender_email,
                     'sender_name': st.session_state.sender_name,
+                    'configuration_set': Config.AWS_SES_CONFIGURATION_SET,
                 }
 
                 email_sender = EmailSender(ses_config)
@@ -1036,6 +1041,145 @@ with tab6:
 
 
 # ─── Sidebar ─────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 7: Email Tracking Dashboard
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab7:
+    st.header("📊 Email Tracking Dashboard")
+    st.markdown("View real-time email delivery and engagement metrics from AWS CloudWatch.")
+
+    if not st.session_state.aws_access_key or not st.session_state.aws_secret_key:
+        st.warning("⚠️ Please configure AWS SES credentials in the Settings tab first.")
+    else:
+        # Time range selector
+        time_col1, time_col2 = st.columns(2)
+        with time_col1:
+            time_range = st.selectbox(
+                "Time Range",
+                options=[1, 6, 12, 24, 48, 72, 168, 336, 720],
+                format_func=lambda h: {
+                    1: "Last 1 hour", 6: "Last 6 hours", 12: "Last 12 hours",
+                    24: "Last 24 hours", 48: "Last 2 days", 72: "Last 3 days",
+                    168: "Last 7 days", 336: "Last 14 days", 720: "Last 30 days"
+                }.get(h, f"Last {h}h"),
+                index=3,  # Default: 24 hours
+            )
+        with time_col2:
+            # Adjust aggregation period based on time range
+            if time_range <= 6:
+                period = 300   # 5 min
+                period_label = "5 minutes"
+            elif time_range <= 48:
+                period = 3600  # 1 hour
+                period_label = "1 hour"
+            else:
+                period = 86400  # 1 day
+                period_label = "1 day"
+            st.info(f"Aggregation period: **{period_label}**")
+
+        if st.button("🔄 Refresh Tracking Data", type="primary"):
+            ses_config = {
+                'aws_access_key': st.session_state.aws_access_key,
+                'aws_secret_key': st.session_state.aws_secret_key,
+                'aws_region': st.session_state.aws_region,
+                'configuration_set': Config.AWS_SES_CONFIGURATION_SET,
+            }
+
+            tracker = EmailTracker(ses_config)
+
+            with st.spinner("Fetching tracking data from CloudWatch..."):
+                result = tracker.get_all_metrics(hours=time_range, period=period)
+
+            if not result['success']:
+                st.error(f"❌ Failed to fetch metrics: {result['error']}")
+            else:
+                totals = result['totals']
+                rates = tracker.get_rates(totals)
+
+                # ── Summary metrics ──
+                st.subheader("📈 Summary")
+                m1, m2, m3, m4, m5 = st.columns(5)
+                m1.metric("📤 Sent", totals.get('Send', 0))
+                m2.metric("✅ Delivered", totals.get('Delivery', 0))
+                m3.metric("👁️ Opens", totals.get('Open', 0))
+                m4.metric("🖱️ Clicks", totals.get('Click', 0))
+                m5.metric("⚠️ Bounces", totals.get('Bounce', 0))
+
+                # ── Rates ──
+                st.subheader("📊 Rates")
+                r1, r2, r3, r4, r5 = st.columns(5)
+                r1.metric("Delivery Rate", f"{rates['delivery_rate']:.1f}%")
+                r2.metric("Open Rate", f"{rates['open_rate']:.1f}%")
+                r3.metric("Click Rate", f"{rates['click_rate']:.1f}%")
+                r4.metric("Bounce Rate", f"{rates['bounce_rate']:.1f}%")
+                r5.metric("Complaint Rate", f"{rates['complaint_rate']:.1f}%")
+
+                # ── Complaints & Rejects ──
+                if totals.get('Complaint', 0) > 0 or totals.get('Reject', 0) > 0:
+                    st.markdown("---")
+                    warn_col1, warn_col2 = st.columns(2)
+                    with warn_col1:
+                        if totals.get('Complaint', 0) > 0:
+                            st.warning(f"🚨 **{totals['Complaint']}** complaint(s) received")
+                    with warn_col2:
+                        if totals.get('Reject', 0) > 0:
+                            st.error(f"🚫 **{totals['Reject']}** email(s) rejected")
+
+                # ── Time-series charts ──
+                st.markdown("---")
+                st.subheader("📉 Event Timeline")
+
+                timeseries = result['timeseries']
+
+                # Build a combined DataFrame for charting
+                chart_data = {}
+                for metric_name in ['Send', 'Delivery', 'Open', 'Click', 'Bounce']:
+                    ts = timeseries.get(metric_name, [])
+                    for dp in ts:
+                        t = dp['timestamp']
+                        if t not in chart_data:
+                            chart_data[t] = {}
+                        chart_data[t][metric_name] = dp['value']
+
+                if chart_data:
+                    import pandas as pd
+                    chart_df = pd.DataFrame.from_dict(chart_data, orient='index')
+                    chart_df = chart_df.fillna(0).sort_index()
+                    chart_df.index.name = 'Time'
+
+                    # Delivery & sends chart
+                    if 'Send' in chart_df.columns or 'Delivery' in chart_df.columns:
+                        st.markdown("**Sends & Deliveries**")
+                        send_cols = [c for c in ['Send', 'Delivery'] if c in chart_df.columns]
+                        st.line_chart(chart_df[send_cols])
+
+                    # Engagement chart
+                    engagement_cols = [c for c in ['Open', 'Click'] if c in chart_df.columns]
+                    if engagement_cols:
+                        st.markdown("**Engagement (Opens & Clicks)**")
+                        st.line_chart(chart_df[engagement_cols])
+
+                    # Bounces chart
+                    if 'Bounce' in chart_df.columns and chart_df['Bounce'].sum() > 0:
+                        st.markdown("**Bounces**")
+                        st.bar_chart(chart_df[['Bounce']])
+                else:
+                    st.info("No event data found for the selected time range.")
+
+                # ── Configuration info ──
+                st.markdown("---")
+                with st.expander("ℹ️ Tracking Configuration"):
+                    st.markdown(f"- **Configuration Set:** `{Config.AWS_SES_CONFIGURATION_SET}`")
+                    st.markdown(f"- **Region:** `{st.session_state.aws_region}`")
+                    st.markdown("- **Tracked Events:** Hard bounces, Clicks, Complaints, Deliveries, Opens")
+                    st.markdown("- **Destination:** Amazon CloudWatch")
+                    st.markdown("")
+                    st.markdown("**Note:** CloudWatch provides aggregate metrics. "
+                                "For per-email event tracking (e.g., which specific recipient opened), "
+                                "add **SNS** or **Kinesis Firehose** as an additional event destination "
+                                "on your SES configuration set.")
+
+
 with st.sidebar:
     st.markdown("## 📧 Exam Email Sender")
     st.markdown("---")

@@ -21,6 +21,7 @@ class EmailSender:
         self.aws_region = ses_config.get('aws_region', 'ap-south-1')
         self.sender_email = ses_config['sender_email']
         self.sender_name = ses_config.get('sender_name', 'Exam Portal')
+        self.configuration_set = ses_config.get('configuration_set', 'CitybankEmailTracking')
 
         self.client = boto3.client(
             'ses',
@@ -62,12 +63,12 @@ class EmailSender:
 
             source = f"{self.sender_name} <{self.sender_email}>"
 
-            response = self.client.send_email(
-                Source=source,
-                Destination={
+            send_kwargs = {
+                'Source': source,
+                'Destination': {
                     'ToAddresses': [recipient_email],
                 },
-                Message={
+                'Message': {
                     'Subject': {
                         'Data': subject,
                         'Charset': 'UTF-8',
@@ -83,7 +84,15 @@ class EmailSender:
                         },
                     },
                 },
-            )
+            }
+
+            if self.configuration_set:
+                send_kwargs['ConfigurationSetName'] = self.configuration_set
+                send_kwargs['Tags'] = [
+                    {'Name': 'configuration-set', 'Value': self.configuration_set},
+                ]
+
+            response = self.client.send_email(**send_kwargs)
 
             message_id = response.get('MessageId', '')
             return True, f"Email sent (MessageId: {message_id})"
@@ -133,11 +142,19 @@ class EmailSender:
             cal_part.add_header('Content-Disposition', 'attachment', filename=ics_filename)
             msg.attach(cal_part)
 
-            response = self.client.send_raw_email(
-                Source=source,
-                Destinations=[recipient_email],
-                RawMessage={'Data': msg.as_string()},
-            )
+            raw_kwargs = {
+                'Source': source,
+                'Destinations': [recipient_email],
+                'RawMessage': {'Data': msg.as_string()},
+            }
+
+            if self.configuration_set:
+                raw_kwargs['ConfigurationSetName'] = self.configuration_set
+                msg['X-SES-CONFIGURATION-SET'] = self.configuration_set
+                msg['X-SES-MESSAGE-TAGS'] = f'configuration-set={self.configuration_set}'
+                raw_kwargs['RawMessage'] = {'Data': msg.as_string()}
+
+            response = self.client.send_raw_email(**raw_kwargs)
 
             message_id = response.get('MessageId', '')
             return True, f"Email with calendar invite sent (MessageId: {message_id})"
