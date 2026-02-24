@@ -95,6 +95,8 @@ def init_session_state():
         'calendar_event_location': '',
         'calendar_event_meeting_link': '',
         'calendar_event_description': '',
+        # Email mode - skip link generation
+        'skip_link_generation': False,
         # Visual editor state
         'visual_editor_active': False,
         'template_editor_key': 0,
@@ -109,17 +111,42 @@ init_session_state()
 # ─── Header ─────────────────────────────────────────────────────────────────
 st.title("📧 Exam Portal Email Sender")
 st.markdown("Automated tool for generating exam links and sending personalized emails to students.")
+
+# ─── Email Mode Toggle ──────────────────────────────────────────────────────
+skip_link_generation = st.toggle(
+    "📨 General Email Mode (send without generating login links)",
+    value=st.session_state.skip_link_generation,
+    help="Enable this to send emails directly to uploaded students without generating exam portal login links. "
+         "Useful for sending general announcements, reminders, or custom emails.",
+)
+st.session_state.skip_link_generation = skip_link_generation
+
+if skip_link_generation:
+    st.info("ℹ️ **General Email Mode** — Login link generation will be skipped. "
+            "You can send emails directly after uploading data and setting up the template. "
+            "Placeholders like `{login_link}`, `{candidate_id}`, `{round_name}`, and `{expires_at}` will be empty.")
+
 st.markdown("---")
 
 # ─── Create tabs ─────────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "1️⃣ API Parameters",
-    "2️⃣ Upload Data",
-    "3️⃣ Generate Links",
-    "4️⃣ Email Template",
-    "5️⃣ Send Emails",
-    "6️⃣ Reports"
-])
+if skip_link_generation:
+    tab1, tab2, tab4, tab5, tab6 = st.tabs([
+        "1️⃣ Email Settings",
+        "2️⃣ Upload Data",
+        "3️⃣ Email Template",
+        "4️⃣ Send Emails",
+        "5️⃣ Reports"
+    ])
+    tab3 = None  # No generate links tab
+else:
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "1️⃣ API Parameters",
+        "2️⃣ Upload Data",
+        "3️⃣ Generate Links",
+        "4️⃣ Email Template",
+        "5️⃣ Send Emails",
+        "6️⃣ Reports"
+    ])
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -320,107 +347,108 @@ with tab2:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 3: Generate Links
+# TAB 3: Generate Links (only when not in general email mode)
 # ═══════════════════════════════════════════════════════════════════════════════
-with tab3:
-    st.header("Step 3: Generate Login Links")
+if tab3 is not None:
+    with tab3:
+        st.header("Step 3: Generate Login Links")
 
-    if not st.session_state.students:
-        st.warning("⚠️ Please upload student data first (Tab 2).")
-    else:
-        st.info(f"📊 Ready to generate links for **{len(st.session_state.students)}** student(s)")
+        if not st.session_state.students:
+            st.warning("⚠️ Please upload student data first (Tab 2).")
+        else:
+            st.info(f"📊 Ready to generate links for **{len(st.session_state.students)}** student(s)")
 
-        # Show current parameters
-        st.markdown(f"""
-        **API Configuration:**
-        - Endpoint: `{st.session_state.api_endpoint}`
-        - Program ID: `{st.session_state.program_id}`
-        - Round ID: `{st.session_state.round_id}`
-        - Session Time: `{st.session_state.session_time}`
-        """)
+            # Show current parameters
+            st.markdown(f"""
+            **API Configuration:**
+            - Endpoint: `{st.session_state.api_endpoint}`
+            - Program ID: `{st.session_state.program_id}`
+            - Round ID: `{st.session_state.round_id}`
+            - Session Time: `{st.session_state.session_time}`
+            """)
 
-        if st.button("🚀 Generate Links from API", type="primary"):
-            emails = [s['email'] for s in st.session_state.students]
+            if st.button("🚀 Generate Links from API", type="primary"):
+                emails = [s['email'] for s in st.session_state.students]
 
-            api_client = APIClient(
-                api_endpoint=st.session_state.api_endpoint,
-                api_key=st.session_state.api_key,
-                timeout=Config.API_TIMEOUT
-            )
-
-            with st.spinner("Calling API to generate links..."):
-                success, response_data, error_msg = api_client.generate_links(
-                    emails=emails,
-                    program_id=st.session_state.program_id,
-                    round_id=st.session_state.round_id,
-                    session_time=st.session_state.session_time
+                api_client = APIClient(
+                    api_endpoint=st.session_state.api_endpoint,
+                    api_key=st.session_state.api_key,
+                    timeout=Config.API_TIMEOUT
                 )
 
-            if success:
-                # Show raw API response for debugging
-                with st.expander("🔍 Raw API Response (Debug)"):
-                    st.json(response_data)
-
-                # Map links and separate successful vs failed
-                students_with_links, failed_candidates = APIClient.map_links_to_students(
-                    st.session_state.students,
-                    response_data
-                )
-                st.session_state.students_with_links = students_with_links
-                st.session_state.failed_candidates = failed_candidates
-                st.session_state.links_generated = True
-
-                # ── Successful candidates (will receive emails) ──
-                if students_with_links:
-                    st.success(f"✅ Successfully generated links for **{len(students_with_links)}** out of {len(st.session_state.students)} student(s)!")
-
-                    st.subheader("📋 Candidates With Links (Will Receive Email)")
-                    result_df = pd.DataFrame(students_with_links)
-                    st.dataframe(result_df, use_container_width=True, height=400)
-
-                    csv_data = result_df.to_csv(index=False)
-                    st.download_button(
-                        label="📥 Download Successful Links CSV",
-                        data=csv_data,
-                        file_name=f"generated_links_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                        mime="text/csv"
+                with st.spinner("Calling API to generate links..."):
+                    success, response_data, error_msg = api_client.generate_links(
+                        emails=emails,
+                        program_id=st.session_state.program_id,
+                        round_id=st.session_state.round_id,
+                        session_time=st.session_state.session_time
                     )
+
+                if success:
+                    # Show raw API response for debugging
+                    with st.expander("🔍 Raw API Response (Debug)"):
+                        st.json(response_data)
+
+                    # Map links and separate successful vs failed
+                    students_with_links, failed_candidates = APIClient.map_links_to_students(
+                        st.session_state.students,
+                        response_data
+                    )
+                    st.session_state.students_with_links = students_with_links
+                    st.session_state.failed_candidates = failed_candidates
+                    st.session_state.links_generated = True
+
+                    # ── Successful candidates (will receive emails) ──
+                    if students_with_links:
+                        st.success(f"✅ Successfully generated links for **{len(students_with_links)}** out of {len(st.session_state.students)} student(s)!")
+
+                        st.subheader("📋 Candidates With Links (Will Receive Email)")
+                        result_df = pd.DataFrame(students_with_links)
+                        st.dataframe(result_df, use_container_width=True, height=400)
+
+                        csv_data = result_df.to_csv(index=False)
+                        st.download_button(
+                            label="📥 Download Successful Links CSV",
+                            data=csv_data,
+                            file_name=f"generated_links_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime="text/csv"
+                        )
+                    else:
+                        st.error("❌ No links were generated for any candidate. Check the failed list below.")
+
+                    # ── Failed candidates (will NOT receive emails) ──
+                    if failed_candidates:
+                        st.markdown("---")
+                        st.subheader("🚫 Failed Candidates (Will NOT Receive Email)")
+                        st.warning(f"{len(failed_candidates)} candidate(s) could not be found in the exam portal. No email will be sent to them.")
+
+                        failed_df = pd.DataFrame(failed_candidates)
+                        st.dataframe(failed_df, use_container_width=True, height=300)
+
+                        failed_csv = failed_df.to_csv(index=False)
+                        st.download_button(
+                            label="📥 Download Failed Candidates CSV",
+                            data=failed_csv,
+                            file_name=f"failed_candidates_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime="text/csv",
+                            key="download_failed"
+                        )
                 else:
-                    st.error("❌ No links were generated for any candidate. Check the failed list below.")
+                    st.error(f"❌ Failed to generate links: {error_msg}")
 
-                # ── Failed candidates (will NOT receive emails) ──
-                if failed_candidates:
+            # Show previously generated links
+            if st.session_state.links_generated:
+                if st.session_state.students_with_links:
                     st.markdown("---")
-                    st.subheader("🚫 Failed Candidates (Will NOT Receive Email)")
-                    st.warning(f"{len(failed_candidates)} candidate(s) could not be found in the exam portal. No email will be sent to them.")
+                    st.subheader("📋 Previously Generated Links")
+                    result_df = pd.DataFrame(st.session_state.students_with_links)
+                    st.dataframe(result_df, use_container_width=True, height=300)
 
-                    failed_df = pd.DataFrame(failed_candidates)
-                    st.dataframe(failed_df, use_container_width=True, height=300)
-
-                    failed_csv = failed_df.to_csv(index=False)
-                    st.download_button(
-                        label="📥 Download Failed Candidates CSV",
-                        data=failed_csv,
-                        file_name=f"failed_candidates_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                        mime="text/csv",
-                        key="download_failed"
-                    )
-            else:
-                st.error(f"❌ Failed to generate links: {error_msg}")
-
-        # Show previously generated links
-        if st.session_state.links_generated:
-            if st.session_state.students_with_links:
-                st.markdown("---")
-                st.subheader("📋 Previously Generated Links")
-                result_df = pd.DataFrame(st.session_state.students_with_links)
-                st.dataframe(result_df, use_container_width=True, height=300)
-
-            if st.session_state.failed_candidates:
-                st.markdown("---")
-                st.subheader("🚫 Previously Failed Candidates")
-                failed_df = pd.DataFrame(st.session_state.failed_candidates)
-                st.dataframe(failed_df, use_container_width=True, height=200)
+                if st.session_state.failed_candidates:
+                    st.markdown("---")
+                    st.subheader("🚫 Previously Failed Candidates")
+                    failed_df = pd.DataFrame(st.session_state.failed_candidates)
+                    st.dataframe(failed_df, use_container_width=True, height=200)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -463,8 +491,12 @@ with tab4:
 
         # Reset to default
         if st.button("🔄 Reset to Default Template"):
-            st.session_state.email_template = TemplateManager.get_default_template()
-            st.session_state.email_subject = '🎓 Your Exam Portal Access Link - {program_name}'
+            if st.session_state.skip_link_generation:
+                st.session_state.email_template = TemplateManager.get_general_email_template()
+                st.session_state.email_subject = '📧 {program_name}'
+            else:
+                st.session_state.email_template = TemplateManager.get_default_template()
+                st.session_state.email_subject = '🎓 Your Exam Portal Access Link - {program_name}'
             st.rerun()
 
     with col_preview:
@@ -480,7 +512,9 @@ with tab4:
 
         # Available placeholders
         with st.expander("📌 Available Placeholders"):
-            placeholders = TemplateManager.get_available_placeholders()
+            placeholders = TemplateManager.get_available_placeholders(
+                general_mode=st.session_state.skip_link_generation
+            )
             placeholder_df = pd.DataFrame(placeholders)
             st.table(placeholder_df)
 
@@ -498,7 +532,9 @@ with tab4:
         else:
             # ── Static Preview ────────────────────────────────────────
             st.markdown("**Email Preview (with sample data):**")
-            sample_data = TemplateManager.get_sample_data()
+            sample_data = TemplateManager.get_sample_data(
+                general_mode=st.session_state.skip_link_generation
+            )
             if st.session_state.custom_program_name:
                 sample_data['program_name'] = st.session_state.custom_program_name
 
@@ -521,17 +557,49 @@ with tab4:
 # TAB 5: Send Emails
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab5:
-    st.header("Step 5: Send Emails")
-
-    if not st.session_state.links_generated:
-        st.warning("⚠️ Please generate links first (Tab 3).")
+    if st.session_state.skip_link_generation:
+        st.header("Send Emails")
     else:
-        students_to_email = [s for s in st.session_state.students_with_links if s.get('login_link') not in (None, 'N/A', '')]
+        st.header("Step 5: Send Emails")
+
+    # Determine if we're ready to send
+    if st.session_state.skip_link_generation:
+        # General email mode — use uploaded students directly
+        _ready_to_send = len(st.session_state.students) > 0
+        if not _ready_to_send:
+            st.warning("⚠️ Please upload student data first (Tab 2).")
+    else:
+        _ready_to_send = st.session_state.links_generated
+        if not _ready_to_send:
+            st.warning("⚠️ Please generate links first (Tab 3).")
+
+    if _ready_to_send:
+        # Build list of students to email
+        if st.session_state.skip_link_generation:
+            # Prepare students without links — just name & email
+            students_to_email = [
+                {
+                    'name': s['name'],
+                    'email': s['email'],
+                    'candidate_id': '',
+                    'login_link': '',
+                    'expires_at': '',
+                    'program_name': st.session_state.custom_program_name or '',
+                    'round_name': '',
+                    'email_status': 'pending',
+                }
+                for s in st.session_state.students
+            ]
+        else:
+            students_to_email = [s for s in st.session_state.students_with_links if s.get('login_link') not in (None, 'N/A', '')]
 
         if not students_to_email:
-            st.warning("⚠️ No candidates with valid links to send emails to. Check the failed candidates list in Tab 3.")
+            if st.session_state.skip_link_generation:
+                st.warning("⚠️ No students found. Please upload student data in Tab 2.")
+            else:
+                st.warning("⚠️ No candidates with valid links to send emails to. Check the failed candidates list in Tab 3.")
 
-        if st.session_state.failed_candidates:
+        if not st.session_state.skip_link_generation and st.session_state.failed_candidates:
             st.info(f"ℹ️ {len(st.session_state.failed_candidates)} candidate(s) were skipped (not found in exam portal). Only candidates with valid links will receive emails.")
 
         # Pre-send checklist
@@ -540,7 +608,10 @@ with tab5:
         check_col1, check_col2 = st.columns(2)
         with check_col1:
             st.markdown(f"✅ **Students to email:** {len(students_to_email)}")
-            st.markdown(f"✅ **Links generated:** {st.session_state.links_generated}")
+            if st.session_state.skip_link_generation:
+                st.markdown("✅ **Mode:** General Email (no login links)")
+            else:
+                st.markdown(f"✅ **Links generated:** {st.session_state.links_generated}")
             st.markdown(f"✅ **Email template ready:** {'Yes' if st.session_state.email_template else 'No'}")
 
         with check_col2:
@@ -564,7 +635,10 @@ with tab5:
 
         # Preview recipients
         with st.expander(f"👥 Preview Recipients ({len(students_to_email)})"):
-            preview_df = pd.DataFrame(students_to_email)[['name', 'email', 'candidate_id', 'login_link']]
+            if st.session_state.skip_link_generation:
+                preview_df = pd.DataFrame(students_to_email)[['name', 'email']]
+            else:
+                preview_df = pd.DataFrame(students_to_email)[['name', 'email', 'candidate_id', 'login_link']]
             st.dataframe(preview_df, use_container_width=True)
 
         st.markdown("---")
@@ -979,14 +1053,23 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("### ℹ️ Workflow")
-    st.markdown("""
-    1. Configure API & SMTP settings
-    2. Upload student CSV/Excel
-    3. Generate exam links via API
-    4. Customize email template
-    5. Send emails to students
-    6. Download reports
-    """)
+    if st.session_state.skip_link_generation:
+        st.markdown("""
+        1. Configure email settings
+        2. Upload student CSV/Excel
+        3. Customize email template
+        4. Send emails to students
+        5. Download reports
+        """)
+    else:
+        st.markdown("""
+        1. Configure API & SMTP settings
+        2. Upload student CSV/Excel
+        3. Generate exam links via API
+        4. Customize email template
+        5. Send emails to students
+        6. Download reports
+        """)
 
     st.markdown("---")
     if st.button("🗑️ Clear All Data"):

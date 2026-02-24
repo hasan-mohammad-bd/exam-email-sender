@@ -158,8 +158,92 @@ class TemplateManager:
 </html>"""
 
     @staticmethod
-    def get_available_placeholders() -> List[Dict[str, str]]:
+    def get_general_email_template() -> str:
+        """Return a general-purpose HTML email template (no login link)"""
+        template_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            'templates',
+            'general_template.html'
+        )
+        if os.path.exists(template_path):
+            with open(template_path, 'r', encoding='utf-8') as f:
+                return f.read()
+
+        # Fallback inline template
+        return """<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background: #ffffff;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .content {
+            padding: 30px;
+        }
+        .footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📧 {program_name}</h1>
+        </div>
+
+        <div class="content">
+            <p>Dear <strong>{name}</strong>,</p>
+
+            <p>We are reaching out to share an important update with you.</p>
+
+            <p>If you have any questions, please do not hesitate to contact us.</p>
+
+            <p>Best regards,<br><strong>The Team</strong></p>
+        </div>
+
+        <div class="footer">
+            <p>This is an automated email. Please do not reply directly.</p>
+        </div>
+    </div>
+</body>
+</html>"""
+
+    @staticmethod
+    def get_available_placeholders(general_mode: bool = False) -> List[Dict[str, str]]:
         """Return list of available placeholders"""
+        if general_mode:
+            return [
+                {'placeholder': '{name}', 'description': 'Student name'},
+                {'placeholder': '{email}', 'description': 'Student email'},
+                {'placeholder': '{program_name}', 'description': 'Program name (set in template editor)'},
+            ]
         return [
             {'placeholder': '{name}', 'description': 'Student name'},
             {'placeholder': '{email}', 'description': 'Student email'},
@@ -172,8 +256,19 @@ class TemplateManager:
         ]
 
     @staticmethod
-    def get_sample_data() -> Dict:
+    def get_sample_data(general_mode: bool = False) -> Dict:
         """Return sample data for template preview"""
+        if general_mode:
+            return {
+                'name': 'John Doe',
+                'email': 'john.doe@example.com',
+                'login_link': '',
+                'candidate_id': '',
+                'program_name': 'General Announcement',
+                'round_name': '',
+                'expires_at': '',
+                'session_duration': '',
+            }
         return {
             'name': 'John Doe',
             'email': 'john.doe@example.com',
