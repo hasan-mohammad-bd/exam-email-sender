@@ -23,6 +23,7 @@ from modules.template_manager import TemplateManager
 from modules.calendar_event import CalendarEvent
 from config.settings import Config
 from modules.visual_editor import visual_editor
+from modules.email_tracking import EmailTracker
 
 # Custom CSS
 st.markdown("""
@@ -132,22 +133,24 @@ st.markdown("---")
 
 # ─── Create tabs ─────────────────────────────────────────────────────────────
 if skip_link_generation:
-    tab1, tab2, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab4, tab5, tab6, tab7 = st.tabs([
         "1️⃣ Email Settings",
         "2️⃣ Upload Data",
         "3️⃣ Email Template",
         "4️⃣ Send Emails",
-        "5️⃣ Reports"
+        "5️⃣ Reports",
+        "6️⃣ Email Tracking"
     ])
     tab3 = None  # No generate links tab
 else:
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "1️⃣ API Parameters",
         "2️⃣ Upload Data",
         "3️⃣ Generate Links",
         "4️⃣ Email Template",
         "5️⃣ Send Emails",
-        "6️⃣ Reports"
+        "6️⃣ Reports",
+        "7️⃣ Email Tracking"
     ])
 
 
@@ -256,6 +259,7 @@ with tab1:
                 'aws_region': aws_region,
                 'sender_email': sender_email,
                 'sender_name': sender_name,
+                'configuration_set': Config.AWS_SES_CONFIGURATION_SET,
             }
             with st.spinner("Testing AWS SES connection..."):
                 email_sender = EmailSender(ses_config)
@@ -762,6 +766,7 @@ with tab5:
                             'aws_region': st.session_state.aws_region,
                             'sender_email': st.session_state.sender_email,
                             'sender_name': st.session_state.sender_name,
+                            'configuration_set': Config.AWS_SES_CONFIGURATION_SET,
                         }
                         resume_sender = EmailSender(ses_config)
 
@@ -1039,6 +1044,7 @@ with tab5:
                     'aws_region': st.session_state.aws_region,
                     'sender_email': st.session_state.sender_email,
                     'sender_name': st.session_state.sender_name,
+                    'configuration_set': Config.AWS_SES_CONFIGURATION_SET,
                 }
 
                 email_sender = EmailSender(ses_config)
@@ -1360,6 +1366,138 @@ with tab6:
             st.info("No saved reports found on disk yet.")
     else:
         st.info("No saved reports found on disk yet.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 7: Email Tracking (CloudWatch Metrics)
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab7:
+    st.header("Email Tracking Dashboard")
+
+    if not Config.AWS_SES_CONFIGURATION_SET:
+        st.warning(
+            "No SES Configuration Set configured. "
+            "Set `AWS_SES_CONFIGURATION_SET` in your `.env` file to enable tracking."
+        )
+    else:
+        st.markdown(f"**Configuration Set:** `{Config.AWS_SES_CONFIGURATION_SET}`")
+
+        # Time range selector
+        time_range = st.selectbox(
+            "Time range",
+            options=[
+                ("Last 1 hour", 1),
+                ("Last 6 hours", 6),
+                ("Last 24 hours", 24),
+                ("Last 3 days", 72),
+                ("Last 7 days", 168),
+                ("Last 14 days", 336),
+                ("Last 30 days", 720),
+            ],
+            format_func=lambda x: x[0],
+            index=2,
+        )
+        hours = time_range[1]
+
+        # Choose aggregation period based on time range
+        if hours <= 6:
+            period = 300  # 5 min
+        elif hours <= 72:
+            period = 3600  # 1 hour
+        else:
+            period = 86400  # 1 day
+
+        if st.button("Refresh Metrics", type="primary"):
+            st.session_state.pop('_tracking_cache', None)
+
+        # Fetch metrics
+        try:
+            tracker = EmailTracker(
+                aws_access_key=st.session_state.aws_access_key,
+                aws_secret_key=st.session_state.aws_secret_key,
+                aws_region=st.session_state.aws_region,
+                configuration_set=Config.AWS_SES_CONFIGURATION_SET,
+            )
+
+            with st.spinner("Fetching metrics from CloudWatch..."):
+                metrics = tracker.get_all_metrics(hours=hours, period=period)
+
+            if metrics.get('error'):
+                st.error(f"Error fetching metrics: {metrics['error']}")
+            else:
+                totals = metrics['totals']
+                rates = EmailTracker.get_rates(totals)
+
+                # ── Summary Metrics ──
+                st.subheader("Summary")
+                m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
+                m1.metric("Sent", f"{int(totals.get('Send', 0))}")
+                m2.metric("Delivered", f"{int(totals.get('Delivery', 0))}")
+                m3.metric("Opens", f"{int(totals.get('Open', 0))}")
+                m4.metric("Clicks", f"{int(totals.get('Click', 0))}")
+                m5.metric("Bounces", f"{int(totals.get('Bounce', 0))}")
+                m6.metric("Complaints", f"{int(totals.get('Complaint', 0))}")
+                m7.metric("Rejects", f"{int(totals.get('Reject', 0))}")
+
+                # ── Rates ──
+                st.subheader("Rates")
+                r1, r2, r3, r4, r5 = st.columns(5)
+                r1.metric("Delivery Rate", f"{rates['delivery_rate']:.1f}%")
+                r2.metric("Open Rate", f"{rates['open_rate']:.1f}%")
+                r3.metric("Click Rate", f"{rates['click_rate']:.1f}%")
+                r4.metric("Bounce Rate", f"{rates['bounce_rate']:.1f}%")
+                r5.metric("Complaint Rate", f"{rates['complaint_rate']:.1f}%")
+
+                # ── Time-Series Charts ──
+                st.subheader("Trends")
+                timeseries = metrics['timeseries']
+
+                # Build a combined dataframe for charting
+                import pandas as _pd
+
+                chart_records = []
+                for metric_name, datapoints in timeseries.items():
+                    for dp in datapoints:
+                        chart_records.append({
+                            'Time': dp['timestamp'],
+                            'Metric': metric_name,
+                            'Count': dp['value'],
+                        })
+
+                if chart_records:
+                    chart_df = _pd.DataFrame(chart_records)
+
+                    # Delivery & Send chart
+                    delivery_df = chart_df[chart_df['Metric'].isin(['Send', 'Delivery'])]
+                    if not delivery_df.empty:
+                        st.markdown("**Send vs Delivery**")
+                        pivot = delivery_df.pivot_table(
+                            index='Time', columns='Metric', values='Count', aggfunc='sum'
+                        ).fillna(0)
+                        st.line_chart(pivot)
+
+                    # Engagement chart (Open + Click)
+                    engage_df = chart_df[chart_df['Metric'].isin(['Open', 'Click'])]
+                    if not engage_df.empty:
+                        st.markdown("**Opens & Clicks**")
+                        pivot = engage_df.pivot_table(
+                            index='Time', columns='Metric', values='Count', aggfunc='sum'
+                        ).fillna(0)
+                        st.line_chart(pivot)
+
+                    # Bounce & Complaint chart
+                    issue_df = chart_df[chart_df['Metric'].isin(['Bounce', 'Complaint', 'Reject'])]
+                    if not issue_df.empty:
+                        st.markdown("**Bounces, Complaints & Rejects**")
+                        pivot = issue_df.pivot_table(
+                            index='Time', columns='Metric', values='Count', aggfunc='sum'
+                        ).fillna(0)
+                        st.bar_chart(pivot)
+                else:
+                    st.info("No tracking data found for this time range. Metrics appear after emails are sent with the configuration set enabled.")
+
+        except Exception as e:
+            st.error(f"Failed to connect to CloudWatch: {str(e)}")
 
 
 # ─── Sidebar ─────────────────────────────────────────────────────────────────

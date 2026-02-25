@@ -22,12 +22,14 @@ class EmailSender:
         """
         ses_config should contain:
         - aws_access_key, aws_secret_key, aws_region, sender_email, sender_name
+        - configuration_set (optional): SES Configuration Set name for tracking
         """
         self.aws_access_key = ses_config['aws_access_key']
         self.aws_secret_key = ses_config['aws_secret_key']
         self.aws_region = ses_config.get('aws_region', 'ap-south-1')
         self.sender_email = ses_config['sender_email']
         self.sender_name = ses_config.get('sender_name', 'Exam Portal')
+        self.configuration_set = ses_config.get('configuration_set', '')
 
         self.client = boto3.client(
             'ses',
@@ -69,12 +71,12 @@ class EmailSender:
 
             source = f"{self.sender_name} <{self.sender_email}>"
 
-            response = self.client.send_email(
-                Source=source,
-                Destination={
+            send_kwargs = {
+                'Source': source,
+                'Destination': {
                     'ToAddresses': [recipient_email],
                 },
-                Message={
+                'Message': {
                     'Subject': {
                         'Data': subject,
                         'Charset': 'UTF-8',
@@ -90,7 +92,11 @@ class EmailSender:
                         },
                     },
                 },
-            )
+            }
+            if self.configuration_set:
+                send_kwargs['ConfigurationSetName'] = self.configuration_set
+
+            response = self.client.send_email(**send_kwargs)
 
             message_id = response.get('MessageId', '')
             return True, f"Email sent (MessageId: {message_id})"
@@ -127,6 +133,8 @@ class EmailSender:
             msg['Subject'] = subject
             msg['From'] = source
             msg['To'] = recipient_email
+            if self.configuration_set:
+                msg['X-SES-CONFIGURATION-SET'] = self.configuration_set
 
             # Attach HTML + plain text as alternatives
             body_part = MIMEMultipart('alternative')
