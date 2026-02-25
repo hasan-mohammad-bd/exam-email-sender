@@ -1,136 +1,176 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f4f4f4;
-        }
-        .container {
-            background: #ffffff;
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
-        }
-        .header h1 {
-            margin: 0;
-            font-size: 24px;
-        }
-        .content {
-            padding: 30px;
-        }
-        .button {
-            display: inline-block;
-            padding: 15px 30px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            margin: 20px 0;
-            font-weight: bold;
-            font-size: 16px;
-        }
-        .button:hover {
-            opacity: 0.9;
-        }
-        .info-box {
-            background: #f8f9fa;
-            padding: 20px;
-            border-left: 4px solid #667eea;
-            margin: 20px 0;
-            border-radius: 0 5px 5px 0;
-        }
-        .info-box h3 {
-            margin-top: 0;
-            color: #667eea;
-        }
-        .info-box ul {
-            list-style: none;
-            padding: 0;
-        }
-        .info-box ul li {
-            padding: 5px 0;
-            border-bottom: 1px solid #eee;
-        }
-        .info-box ul li:last-child {
-            border-bottom: none;
-        }
-        .footer {
-            background: #f8f9fa;
-            padding: 20px;
-            text-align: center;
-            font-size: 12px;
-            color: #888;
-        }
-        .instructions {
-            background: #fff3cd;
-            padding: 15px;
-            border-radius: 5px;
-            margin: 20px 0;
-        }
-        .instructions h3 {
-            margin-top: 0;
-            color: #856404;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assessment Access Details - City Bank PLC</title>
+
+<style>
+body{
+    margin:0 !important;
+    padding:0 !important;
+    background-color:#f4f6f8;
+    font-family: Arial, Helvetica, sans-serif;
+    -webkit-text-size-adjust:100%;
+    -ms-text-size-adjust:100%;
+}
+
+table{
+    border-spacing:0;
+    border-collapse:collapse;
+}
+
+.container{
+    width:100%;
+    max-width:600px;
+    background:#ffffff;
+}
+
+.content-padding{
+    padding:30px;
+}
+
+.heading-border{
+    border-left:4px solid #E30613;
+    padding-left:8px;
+}
+
+.details-box{
+    background:#f9f9f9;
+    padding:18px;
+    border:1px solid #e6e6e6;
+    margin-top:10px;
+}
+
+@media screen and (max-width:600px){
+
+    .container{
+        width:100% !important;
+    }
+
+    .content-padding{
+        padding:20px !important;
+    }
+
+    h2{
+        font-size:20px !important;
+    }
+
+    h3{
+        font-size:16px !important;
+    }
+
+    p, li{
+        font-size:14px !important;
+        line-height:1.6 !important;
+    }
+}
+</style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🎓 Exam Portal Access</h1>
-            <p style="margin: 5px 0 0 0; opacity: 0.9;">Your exam link is ready</p>
-        </div>
 
-        <div class="content">
-            <p>Dear <strong>{name}</strong>,</p>
+<body><!-- Outer Wrapper -->
+<table width="100%" cellpadding="0" cellspacing="0" bgcolor="#f4f6f8">
+<tbody><tr>
+<td align="center">
 
-            <p>Your exam portal link for <strong>{program_name}</strong> has been generated.
-            Please use the button below to access your exam.</p>
+<!-- Main Container -->
+<table class="container" width="600" cellpadding="0" cellspacing="0" style="box-shadow:0 4px 10px rgba(0,0,0,0.06);">
 
-            <center>
-                <a href="{login_link}" class="button">🔗 Access Exam Portal</a>
-            </center>
+<!-- Header -->
+<tbody><tr>
+<td style="background-color:#ffffff; padding:25px; text-align:center;">
+<h2 style="margin:0; font-weight:600; color:#E30613;">City Bank PLC</h2>
+<p style="margin:6px 0 0 0; font-size:14px; color:#000000;">
+Assessment Access Details
+</p>
+</td>
+</tr>
 
-            <div class="info-box">
-                <h3>📋 Exam Details</h3>
-                <ul>
-                    <li><strong>Candidate ID:</strong> {candidate_id}</li>
-                    <li><strong>Program:</strong> {program_name}</li>
-                    <li><strong>Round:</strong> {round_name}</li>
-                    <li><strong>Link Expires:</strong> {expires_at}</li>
-                </ul>
-            </div>
+<!-- Body -->
+<tr>
+<td class="content-padding" style="font-size: 14px; line-height: 1.7;">
 
-            <div class="instructions">
-                <h3>⚠️ Important Instructions</h3>
-                <ul>
-                    <li>This link is unique to you — do not share it with anyone.</li>
-                    <li>Ensure a stable internet connection before starting.</li>
-                    <li>Use a modern browser (Chrome, Firefox, or Edge).</li>
-                    <li>Complete the exam before the expiry time.</li>
-                </ul>
-            </div>
+<p style="color: rgb(0, 0, 0);">Dear&nbsp;{name},</p>
 
-            <p>If you have any questions, please contact the recruitment team.</p>
+<p style="color: rgb(0, 0, 0);">Greetings from <strong style="color:#E30613;">City Bank PLC</strong>.</p>
 
-            <p>Best regards,<br><strong>Recruitment Team</strong></p>
-        </div>
+<p style="color: rgb(0, 0, 0);">
+As communicated earlier, you are scheduled to participate in the online assessment for the 
+<strong>Trainee Assistant Manager - Digital Banking</strong> position at City Bank PLC.
+</p>
 
-        <div class="footer">
-            <p>This is an automated email. Please do not reply directly.</p>
-        </div>
-    </div>
-</body>
+<h3 class="heading-border" style="color: rgb(0, 0, 0); margin-top: 25px;">
+Please find your assessment access details below:
+</h3>
+
+<div class="details-box" style="">
+<p style="color: rgb(0, 0, 0);"><strong>Assessment Link:</strong>&nbsp;<a href="{login_link}"> Exam Link</a></p>
+<p style="color: rgb(0, 0, 0);"><strong>Login ID:</strong>&nbsp;{login_id}</p>
+<p><strong><font color="#383838">Password:</font><font color="#b42222"> </font></strong>{password}</p>
+</div>
+
+<p style=""><strong style=""><font color="#b42222">Important:</font></strong> Please keep these credentials ready before the exam in paper or in notes. May come in handy somewhere in the exam.</p>
+
+<p style="color: rgb(0, 0, 0);">
+<strong>Test Date:</strong> 26 February (Thursday)<br>
+<strong>Test Time:</strong> 11:30 AM – 1:30 PM<br>
+<strong>Duration:</strong> 120 Minutes
+</p>
+
+<p style="color: rgb(0, 0, 0);">
+You may access the link prior to the scheduled start time to complete system checks and review instructions. 
+However, the assessment will only become active once the official exam window opens.
+</p>
+
+<h3 class="heading-border" style="color: rgb(0, 0, 0); margin-top: 25px;">
+Kindly ensure the following before logging in:
+</h3>
+
+<ul style="color: rgb(0, 0, 0); padding-left: 20px;">
+<li>Use a desktop or laptop computer only.</li>
+<li>Use the latest version of a supported browser (Chrome, Edge, Safari, Brave, or Opera).</li>
+<li>Ensure a stable internet connection.</li>
+<li>Confirm that your webcam, microphone, and screen-sharing functions are working properly.</li>
+</ul>
+
+<p style="color: rgb(0, 0, 0);">
+Please keep your login credentials confidential. Do not share the assessment link or credentials with anyone.
+</p>
+
+<p style="color: rgb(0, 0, 0);">
+If you experience any technical difficulties, contact us immediately at:
+<span style="text-decoration-thickness: initial; text-decoration-style: initial; text-decoration-color: initial;"><a href="mailto:citybank.recruitment@v2.ltd">
+citybank.recruitment@v2.ltd
+</a></span>
+</p>
+
+<p style="color: rgb(0, 0, 0);">
+For emergency assistance during the assessment, our hotline number (09639 242 424) will remain open from 10:30 AM to 1:30 PM.
+</p>
+
+<p style="color: rgb(0, 0, 0);">
+We wish you every success in your assessment.
+</p>
+
+<p style="color: rgb(0, 0, 0); margin-top: 30px;">
+Warm regards,<br>
+<strong>Talent Acquisition Team</strong><br>
+<span style="color:#E30613;">City Bank PLC</span>
+</p>
+
+</td>
+</tr>
+
+<!-- Footer -->
+<tr>
+<td style="background-color:#ffffff; padding:18px; text-align:center; font-size:12px; color:#000000;">
+© 2026 <span style="color:#E30613;">City Bank PLC</span> | Bangladesh
+</td>
+</tr>
+
+</tbody></table>
+
+</td>
+</tr>
+</tbody></table></body>
 </html>
