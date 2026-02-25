@@ -69,7 +69,7 @@ def init_session_state():
         'email_results': [],
         'file_errors': [],
         'email_template': TemplateManager.get_default_template(),
-        'email_subject': '🎓 Your Exam Portal Access Link - {program_name}',
+        'email_subject': 'Invitation to Online Assessment | TAM – Digital Banking | 26 February',
         'program_id': int(Config.DEFAULT_PROGRAM_ID) if Config.DEFAULT_PROGRAM_ID else 1,
         'round_id': int(Config.DEFAULT_ROUND_ID) if Config.DEFAULT_ROUND_ID else 1,
         'session_time': Config.DEFAULT_SESSION_TIME or '730h',
@@ -493,10 +493,10 @@ with tab4:
         if st.button("🔄 Reset to Default Template"):
             if st.session_state.skip_link_generation:
                 st.session_state.email_template = TemplateManager.get_general_email_template()
-                st.session_state.email_subject = '📧 {program_name}'
+                st.session_state.email_subject = 'Invitation to Online Assessment | TAM – Digital Banking | 26 February'
             else:
                 st.session_state.email_template = TemplateManager.get_default_template()
-                st.session_state.email_subject = '🎓 Your Exam Portal Access Link - {program_name}'
+                st.session_state.email_subject = 'Invitation to Online Assessment | TAM – Digital Banking | 26 February'
             st.rerun()
 
     with col_preview:
