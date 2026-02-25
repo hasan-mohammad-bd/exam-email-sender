@@ -622,6 +622,104 @@ with tab5:
 
         st.markdown("---")
 
+        # ── Resume from Crash Section ──────────────────────────────────────────
+        resumable_session = EmailSender.get_resumable_session()
+        if resumable_session:
+            st.markdown("---")
+            st.subheader("🔄 Resume Previous Session")
+            st.warning(
+                f"⚠️ **A previous email session was interrupted!**\n\n"
+                f"- **Status:** {resumable_session['status'].upper()}\n"
+                f"- **Processed:** {resumable_session['processed']}/{resumable_session['total']} emails\n"
+                f"- **Sent:** {resumable_session['sent']} ✅ | **Failed:** {resumable_session['failed']} ❌\n"
+                f"- **Remaining:** {resumable_session['remaining']} emails\n"
+                f"- **Started at:** {resumable_session['started_at']}"
+                + (f"\n- **Error:** {resumable_session['crash_error']}" if resumable_session.get('crash_error') else "")
+            )
+
+            resume_col1, resume_col2 = st.columns(2)
+            with resume_col1:
+                if st.button("🔄 Resume Sending", type="primary"):
+                    if not st.session_state.aws_access_key or not st.session_state.aws_secret_key:
+                        st.error("❌ Please configure AWS SES credentials first.")
+                    else:
+                        ses_config = {
+                            'aws_access_key': st.session_state.aws_access_key,
+                            'aws_secret_key': st.session_state.aws_secret_key,
+                            'aws_region': st.session_state.aws_region,
+                            'sender_email': st.session_state.sender_email,
+                            'sender_name': st.session_state.sender_name,
+                        }
+                        resume_sender = EmailSender(ses_config)
+
+                        with st.spinner("Testing AWS SES connection..."):
+                            conn_ok, conn_msg = resume_sender.test_connection()
+
+                        if not conn_ok:
+                            st.error(f"❌ AWS SES connection failed: {conn_msg}")
+                        else:
+                            st.success(f"✅ Connected! Resuming from email {resumable_session['processed'] + 1}...")
+
+                            resume_progress = st.progress(resumable_session['processed'] / resumable_session['total'])
+                            resume_status = st.empty()
+                            resume_counts = {'sent': resumable_session['sent'], 'failed': resumable_session['failed']}
+
+                            def resume_progress_callback(current, total, email, success, message):
+                                if not email.startswith("(resumed"):
+                                    if success:
+                                        resume_counts['sent'] += 1
+                                    else:
+                                        resume_counts['failed'] += 1
+                                progress = current / total
+                                resume_progress.progress(progress)
+                                status_icon = "✅" if success else "❌"
+                                resume_status.markdown(
+                                    f"**Progress:** {current}/{total} | "
+                                    f"✅ Sent: {resume_counts['sent']} | ❌ Failed: {resume_counts['failed']} | "
+                                    f"Last: {status_icon} {email}"
+                                )
+
+                            cal_config = None
+                            if st.session_state.include_calendar_event:
+                                cal_config = {
+                                    'event_type': st.session_state.calendar_event_type,
+                                    'title': st.session_state.calendar_event_title,
+                                    'date_str': st.session_state.calendar_event_date.strftime('%Y-%m-%d') if st.session_state.calendar_event_date else '',
+                                    'start_time_str': st.session_state.calendar_event_start_time.strftime('%H:%M'),
+                                    'duration_str': st.session_state.calendar_event_duration or '1 hour',
+                                    'organizer_name': st.session_state.calendar_event_organizer_name or st.session_state.sender_name,
+                                    'organizer_email': st.session_state.calendar_event_organizer_email or st.session_state.sender_email,
+                                    'location': st.session_state.calendar_event_location,
+                                    'meeting_link': st.session_state.calendar_event_meeting_link,
+                                    'description': st.session_state.calendar_event_description,
+                                }
+
+                            try:
+                                results = resume_sender.send_bulk_emails(
+                                    students=students_to_email,
+                                    subject=st.session_state.email_subject,
+                                    html_template=st.session_state.email_template,
+                                    delay=float(Config.DELAY_BETWEEN_EMAILS),
+                                    progress_callback=resume_progress_callback,
+                                    calendar_event_config=cal_config,
+                                    checkpoint_interval=10,
+                                    resume_from_checkpoint=True,
+                                )
+                                st.session_state.email_results = results
+                                st.session_state.emails_sent = True
+                                st.success(f"✅ Resume complete! Sent: {resume_counts['sent']} | Failed: {resume_counts['failed']}")
+                                st.balloons()
+                            except Exception as e:
+                                st.error(f"⚠️ Crashed again: {str(e)}. Progress saved — you can resume again.")
+
+            with resume_col2:
+                if st.button("🗑️ Discard & Start Fresh"):
+                    EmailSender.clear_checkpoint(resumable_session.get('checkpoint_file'))
+                    st.success("✅ Previous session cleared. You can start a fresh send.")
+                    st.rerun()
+
+            st.markdown("---")
+
         # Email sending settings
         st.subheader("⚙️ Sending Settings")
         delay_between = st.slider(
@@ -863,6 +961,11 @@ with tab5:
                             f"Last: {status_icon} {email}"
                         )
 
+                        # Save intermediate results to session state every 10 emails
+                        # so partial data survives Streamlit reruns
+                        if current % 10 == 0:
+                            st.session_state.email_results_partial = True
+
                     # Override program_name if custom value is set
                     if st.session_state.custom_program_name:
                         for s in students_to_email:
@@ -884,18 +987,37 @@ with tab5:
                             'description': st.session_state.calendar_event_description,
                         }
 
-                    # Send emails
-                    results = email_sender.send_bulk_emails(
-                        students=students_to_email,
-                        subject=st.session_state.email_subject,
-                        html_template=st.session_state.email_template,
-                        delay=delay_between,
-                        progress_callback=progress_callback,
-                        calendar_event_config=cal_config,
-                    )
+                    # Send emails with crash protection
+                    results = None
+                    try:
+                        results = email_sender.send_bulk_emails(
+                            students=students_to_email,
+                            subject=st.session_state.email_subject,
+                            html_template=st.session_state.email_template,
+                            delay=delay_between,
+                            progress_callback=progress_callback,
+                            calendar_event_config=cal_config,
+                            checkpoint_interval=10,
+                        )
+                    except Exception as e:
+                        st.error(
+                            f"⚠️ **Email sending crashed after {counts['sent'] + counts['failed']} emails!**\n\n"
+                            f"**Error:** {str(e)}\n\n"
+                            f"✅ Sent: {counts['sent']} | ❌ Failed: {counts['failed']} | "
+                            f"📭 Not sent: {len(students_to_email) - counts['sent'] - counts['failed']}\n\n"
+                            f"📁 A crash report has been auto-saved to the `reports/` folder.\n\n"
+                            f"🔄 **You can resume sending** from where it stopped — reload the app and use the Resume button."
+                        )
+                        # Load partial results from the checkpoint
+                        resumable = EmailSender.get_resumable_session()
+                        if resumable:
+                            checkpoint_data = EmailSender._load_latest_checkpoint()
+                            if checkpoint_data:
+                                results = checkpoint_data.get('results', [])
 
-                    st.session_state.email_results = results
-                    st.session_state.emails_sent = True
+                    if results:
+                        st.session_state.email_results = results
+                        st.session_state.emails_sent = True
 
                     # Final summary
                     st.markdown("---")
@@ -903,7 +1025,7 @@ with tab5:
 
                     summary_col1, summary_col2, summary_col3 = st.columns(3)
                     with summary_col1:
-                        st.metric("Total Emails", len(results))
+                        st.metric("Total Emails", counts['sent'] + counts['failed'])
                     with summary_col2:
                         st.metric("Successfully Sent", counts['sent'])
                     with summary_col3:
@@ -912,7 +1034,8 @@ with tab5:
                     if counts['failed'] > 0:
                         st.warning("Some emails failed to send. Check the Reports tab for details.")
 
-                    st.balloons()
+                    if results and len(results) == len(students_to_email):
+                        st.balloons()
 
         # Show previous results if available
         if st.session_state.emails_sent and st.session_state.email_results:
@@ -1033,6 +1156,97 @@ with tab6:
                     mime="text/csv",
                     key="download_failed"
                 )
+
+    # --- Saved Reports on Disk (crash reports, auto-saved reports) ---
+    st.markdown("---")
+    st.subheader("💾 Saved Reports on Disk")
+    reports_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reports')
+    if os.path.exists(reports_dir):
+        report_files = sorted(
+            [f for f in os.listdir(reports_dir) if f.endswith('.csv') or f.endswith('.txt')],
+            reverse=True
+        )
+        crash_reports = [f for f in report_files if f.lower().startswith('crash')]
+        normal_reports = [f for f in report_files if not f.lower().startswith('crash') and not f.startswith('checkpoint_')]
+
+        all_reports = crash_reports + normal_reports
+
+        if all_reports:
+            # Delete All button
+            del_all_col1, del_all_col2 = st.columns([3, 1])
+            with del_all_col2:
+                if st.button("🗑️ Delete All Reports", type="secondary", key="delete_all_reports"):
+                    for fname in all_reports:
+                        try:
+                            os.remove(os.path.join(reports_dir, fname))
+                        except Exception:
+                            pass
+                    # Also clean up checkpoint files
+                    for fname in os.listdir(reports_dir):
+                        if fname.startswith('checkpoint_') and fname.endswith('.json'):
+                            try:
+                                os.remove(os.path.join(reports_dir, fname))
+                            except Exception:
+                                pass
+                    st.success("✅ All reports deleted.")
+                    st.rerun()
+
+        if crash_reports:
+            st.warning(f"⚠️ **{len(crash_reports)} crash report(s) found:**")
+            for fname in crash_reports:
+                fpath = os.path.join(reports_dir, fname)
+                with open(fpath, 'r', encoding='utf-8') as rf:
+                    file_data = rf.read()
+                col_a, col_b, col_c = st.columns([3, 1, 1])
+                with col_a:
+                    st.text(f"📄 {fname}")
+                with col_b:
+                    st.download_button(
+                        label="📥 Download",
+                        data=file_data,
+                        file_name=fname,
+                        mime="text/csv" if fname.endswith('.csv') else "text/plain",
+                        key=f"download_report_{fname}"
+                    )
+                with col_c:
+                    if st.button("🗑️ Delete", key=f"delete_report_{fname}"):
+                        try:
+                            os.remove(fpath)
+                            st.success(f"Deleted {fname}")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to delete: {e}")
+
+        if normal_reports:
+            st.info(f"📁 **{len(normal_reports)} auto-saved report(s):**")
+            for fname in normal_reports:
+                fpath = os.path.join(reports_dir, fname)
+                with open(fpath, 'r', encoding='utf-8') as rf:
+                    file_data = rf.read()
+                col_a, col_b, col_c = st.columns([3, 1, 1])
+                with col_a:
+                    st.text(f"📄 {fname}")
+                with col_b:
+                    st.download_button(
+                        label="📥 Download",
+                        data=file_data,
+                        file_name=fname,
+                        mime="text/csv",
+                        key=f"download_report_{fname}"
+                    )
+                with col_c:
+                    if st.button("🗑️ Delete", key=f"delete_report_{fname}"):
+                        try:
+                            os.remove(fpath)
+                            st.success(f"Deleted {fname}")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to delete: {e}")
+
+        if not crash_reports and not normal_reports:
+            st.info("No saved reports found on disk yet.")
+    else:
+        st.info("No saved reports found on disk yet.")
 
 
 # ─── Sidebar ─────────────────────────────────────────────────────────────────
