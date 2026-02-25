@@ -9,20 +9,20 @@ import time
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from modules.file_handler import FileHandler
-from modules.api_client import APIClient
-from modules.email_sender import EmailSender
-from modules.template_manager import TemplateManager
-from modules.calendar_event import CalendarEvent
-from modules.visual_editor import visual_editor
-from config.settings import Config
-
-# Page configuration
+# Page configuration — must be the very first Streamlit command
 st.set_page_config(
     page_title="Exam Portal Email Sender",
     page_icon="📧",
     layout="wide"
 )
+
+from modules.file_handler import FileHandler
+from modules.api_client import APIClient
+from modules.email_sender import EmailSender
+from modules.template_manager import TemplateManager
+from modules.calendar_event import CalendarEvent
+from config.settings import Config
+from modules.visual_editor import visual_editor
 
 # Custom CSS
 st.markdown("""
@@ -908,7 +908,7 @@ with tab5:
                 )
                 st.session_state.calendar_event_start_time = ev_start_time
 
-                st.markdown("**Duration \*:**")
+                st.markdown(r"**Duration \*:**")
                 dur_col_h, dur_col_m = st.columns(2)
                 with dur_col_h:
                     ev_dur_hours = st.number_input(
