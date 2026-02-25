@@ -28,9 +28,23 @@ class FileHandler:
         return df
 
     @staticmethod
-    def process_file(file) -> Tuple[List[Dict], List[str]]:
+    def get_file_columns(file) -> List[str]:
+        """Read a file and return its column names (normalized to lowercase)."""
+        try:
+            df = FileHandler.read_file(file)
+            return [col.strip().lower() for col in df.columns]
+        except Exception:
+            return []
+
+    @staticmethod
+    def process_file(
+        file,
+        login_id_column: str = '',
+        password_column: str = '',
+    ) -> Tuple[List[Dict], List[str]]:
         """
         Process uploaded file and extract student data.
+        Optionally maps login_id and password columns if provided.
         Returns: (student_list, errors)
         """
         errors = []
@@ -67,6 +81,21 @@ class FileHandler:
         # Rename columns to standard names
         df = df.rename(columns={v: k for k, v in resolved_columns.items()})
 
+        # Handle optional login_id column
+        has_login_id = False
+        if login_id_column and login_id_column in df.columns:
+            df['login_id'] = df[login_id_column].fillna('').astype(str).str.strip()
+            has_login_id = True
+        elif login_id_column and login_id_column != df.columns and login_id_column:
+            # Column was selected but renamed — check original mapping
+            pass
+
+        # Handle optional password column
+        has_password = False
+        if password_column and password_column in df.columns:
+            df['password'] = df[password_column].fillna('').astype(str).str.strip()
+            has_password = True
+
         # Drop rows where both name and email are missing
         df = df.dropna(subset=['name', 'email'], how='all')
 
@@ -97,10 +126,16 @@ class FileHandler:
                 errors.append(f"Row {idx + 2}: Invalid email format '{email}'")
                 continue
 
-            valid_students.append({
+            student = {
                 'name': name,
                 'email': email,
-            })
+            }
+            if has_login_id:
+                student['login_id'] = row.get('login_id', '')
+            if has_password:
+                student['password'] = row.get('password', '')
+
+            valid_students.append(student)
 
         if not valid_students:
             errors.append("No valid student records found in the file.")

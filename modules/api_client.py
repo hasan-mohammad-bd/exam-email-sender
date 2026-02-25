@@ -169,6 +169,8 @@ class APIClient:
                 'expires_at': APIClient._format_expires_at(link_data.get('expires_at', 'N/A')),
                 'program_name': program_name,
                 'round_name': round_name,
+                'login_id': student.get('login_id', ''),
+                'password': student.get('password', ''),
                 'email_status': 'pending',
             }
             successful_students.append(enriched_student)

@@ -504,6 +504,8 @@ class EmailSender:
             '{round_name}': str(data.get('round_name', '')),
             '{expires_at}': str(data.get('expires_at', '')),
             '{session_duration}': str(data.get('session_duration', '')),
+            '{login_id}': str(data.get('login_id', '')),
+            '{password}': str(data.get('password', '')),
         }
 
         result = text

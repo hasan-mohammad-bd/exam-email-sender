@@ -265,30 +265,46 @@ class TemplateManager:
 </html>"""
 
     @staticmethod
-    def get_available_placeholders(general_mode: bool = False) -> List[Dict[str, str]]:
+    def get_available_placeholders(
+        general_mode: bool = False,
+        has_login_id: bool = False,
+        has_password: bool = False,
+    ) -> List[Dict[str, str]]:
         """Return list of available placeholders"""
         if general_mode:
-            return [
+            placeholders = [
                 {'placeholder': '{name}', 'description': 'Student name'},
                 {'placeholder': '{email}', 'description': 'Student email'},
                 {'placeholder': '{program_name}', 'description': 'Program name (set in template editor)'},
             ]
-        return [
-            {'placeholder': '{name}', 'description': 'Student name'},
-            {'placeholder': '{email}', 'description': 'Student email'},
-            {'placeholder': '{login_link}', 'description': 'Unique login URL'},
-            {'placeholder': '{candidate_id}', 'description': 'Candidate ID'},
-            {'placeholder': '{program_name}', 'description': 'Program name'},
-            {'placeholder': '{round_name}', 'description': 'Round name'},
-            {'placeholder': '{expires_at}', 'description': 'Link expiry time'},
-            {'placeholder': '{session_duration}', 'description': 'Session duration'},
-        ]
+        else:
+            placeholders = [
+                {'placeholder': '{name}', 'description': 'Student name'},
+                {'placeholder': '{email}', 'description': 'Student email'},
+                {'placeholder': '{login_link}', 'description': 'Unique login URL'},
+                {'placeholder': '{candidate_id}', 'description': 'Candidate ID'},
+                {'placeholder': '{program_name}', 'description': 'Program name'},
+                {'placeholder': '{round_name}', 'description': 'Round name'},
+                {'placeholder': '{expires_at}', 'description': 'Link expiry time'},
+                {'placeholder': '{session_duration}', 'description': 'Session duration'},
+            ]
+
+        if has_login_id:
+            placeholders.append({'placeholder': '{login_id}', 'description': 'Login ID (from uploaded data)'})
+        if has_password:
+            placeholders.append({'placeholder': '{password}', 'description': 'Password (from uploaded data)'})
+
+        return placeholders
 
     @staticmethod
-    def get_sample_data(general_mode: bool = False) -> Dict:
+    def get_sample_data(
+        general_mode: bool = False,
+        has_login_id: bool = False,
+        has_password: bool = False,
+    ) -> Dict:
         """Return sample data for template preview"""
         if general_mode:
-            return {
+            data = {
                 'name': 'John Doe',
                 'email': 'john.doe@example.com',
                 'login_link': '',
@@ -298,13 +314,21 @@ class TemplateManager:
                 'expires_at': '',
                 'session_duration': '',
             }
-        return {
-            'name': 'John Doe',
-            'email': 'john.doe@example.com',
-            'login_link': 'https://exam-portal.example.com/login/abc123',
-            'candidate_id': '12345',
-            'program_name': 'Software Engineering Assessment',
-            'round_name': 'Technical Round 1',
-            'expires_at': '2026-03-17 23:59:59',
-            'session_duration': '730h',
-        }
+        else:
+            data = {
+                'name': 'John Doe',
+                'email': 'john.doe@example.com',
+                'login_link': 'https://exam-portal.example.com/login/abc123',
+                'candidate_id': '12345',
+                'program_name': 'Software Engineering Assessment',
+                'round_name': 'Technical Round 1',
+                'expires_at': '2026-03-17 23:59:59',
+                'session_duration': '730h',
+            }
+
+        if has_login_id:
+            data['login_id'] = 'sample_user_01'
+        if has_password:
+            data['password'] = 'SamplePass@123'
+
+        return data

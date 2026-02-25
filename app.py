@@ -102,7 +102,7 @@ def init_session_state():
         'visual_editor_active': False,
         'template_editor_key': 0,
         # Manual input rows
-        'manual_entry_rows': [{'name': '', 'email': ''}],
+        'manual_entry_rows': [{'name': '', 'email': '', 'login_id': '', 'password': ''}],
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -318,12 +318,44 @@ with tab2:
         uploaded_file = st.file_uploader(
             "Choose a CSV or Excel file",
             type=['csv', 'xlsx', 'xls'],
-            help="File must have 'Name' and 'Email' columns"
+            help="File must have 'Name' and 'Email' columns. Optionally include Login ID and Password columns."
         )
 
         if uploaded_file is not None:
+            # Read file columns for optional mapping
+            uploaded_file.seek(0)
+            file_columns = FileHandler.get_file_columns(uploaded_file)
+            uploaded_file.seek(0)
+
+            # Optional login_id and password column pickers
+            none_option = '— None —'
+            col_opt1, col_opt2 = st.columns(2)
+            with col_opt1:
+                login_id_col = st.selectbox(
+                    "Login ID Column (optional)",
+                    options=[none_option] + file_columns,
+                    index=0,
+                    help="Select the column that contains Login IDs. Leave as '— None —' to skip.",
+                    key="file_login_id_col",
+                )
+            with col_opt2:
+                password_col = st.selectbox(
+                    "Password Column (optional)",
+                    options=[none_option] + file_columns,
+                    index=0,
+                    help="Select the column that contains Passwords. Leave as '— None —' to skip.",
+                    key="file_password_col",
+                )
+
+            selected_login_id_col = '' if login_id_col == none_option else login_id_col
+            selected_password_col = '' if password_col == none_option else password_col
+
             with st.spinner("Processing file..."):
-                students, errors = FileHandler.process_file(uploaded_file)
+                students, errors = FileHandler.process_file(
+                    uploaded_file,
+                    login_id_column=selected_login_id_col,
+                    password_column=selected_password_col,
+                )
 
             # Show errors
             if errors:
@@ -356,24 +388,38 @@ with tab2:
 
     else:
         # ── Manual Input ────────────────────────────────────────────────────
-        st.markdown("Enter student **Name** and **Email** below. Click ➕ to add more rows.")
+        st.markdown("Enter student **Name** and **Email** below. **Login ID** and **Password** are optional. Click ➕ to add more rows.")
 
         rows = st.session_state.manual_entry_rows
 
         for idx in range(len(rows)):
-            col_name, col_email, col_del = st.columns([3, 4, 1])
+            col_name, col_email, col_login, col_pass, col_del = st.columns([2.5, 3, 2, 2, 0.5])
             with col_name:
                 rows[idx]['name'] = st.text_input(
-                    "Name", value=rows[idx]['name'],
+                    "Name", value=rows[idx].get('name', ''),
                     key=f"manual_name_{idx}",
                     placeholder="e.g. Alice Smith",
                     label_visibility="collapsed" if idx > 0 else "visible"
                 )
             with col_email:
                 rows[idx]['email'] = st.text_input(
-                    "Email", value=rows[idx]['email'],
+                    "Email", value=rows[idx].get('email', ''),
                     key=f"manual_email_{idx}",
                     placeholder="e.g. alice@example.com",
+                    label_visibility="collapsed" if idx > 0 else "visible"
+                )
+            with col_login:
+                rows[idx]['login_id'] = st.text_input(
+                    "Login ID (optional)", value=rows[idx].get('login_id', ''),
+                    key=f"manual_login_id_{idx}",
+                    placeholder="e.g. user123",
+                    label_visibility="collapsed" if idx > 0 else "visible"
+                )
+            with col_pass:
+                rows[idx]['password'] = st.text_input(
+                    "Password (optional)", value=rows[idx].get('password', ''),
+                    key=f"manual_password_{idx}",
+                    placeholder="e.g. pass@123",
                     label_visibility="collapsed" if idx > 0 else "visible"
                 )
             with col_del:
@@ -386,7 +432,7 @@ with tab2:
 
         # Add row button
         if st.button("➕ Add Another", key="add_manual_row"):
-            rows.append({'name': '', 'email': ''})
+            rows.append({'name': '', 'email': '', 'login_id': '', 'password': ''})
             st.rerun()
 
         st.markdown("---")
@@ -397,8 +443,10 @@ with tab2:
             seen_emails = set()
 
             for i, row in enumerate(rows, start=1):
-                name = row['name'].strip()
-                email = row['email'].strip().lower()
+                name = row.get('name', '').strip()
+                email = row.get('email', '').strip().lower()
+                login_id = row.get('login_id', '').strip()
+                password = row.get('password', '').strip()
 
                 if not name and not email:
                     continue  # skip empty rows
@@ -419,7 +467,12 @@ with tab2:
                     continue
 
                 seen_emails.add(email)
-                manual_students.append({'name': name, 'email': email})
+                student = {'name': name, 'email': email}
+                if login_id:
+                    student['login_id'] = login_id
+                if password:
+                    student['password'] = password
+                manual_students.append(student)
 
             if manual_errors:
                 with st.expander(f"⚠️ {len(manual_errors)} Warning(s)/Error(s)", expanded=True):
@@ -627,10 +680,17 @@ with tab4:
         )
         st.session_state.visual_editor_active = visual_mode
 
+        # Detect if students have login_id / password
+        _students_data = st.session_state.get('students', [])
+        _has_login_id = any(s.get('login_id') for s in _students_data)
+        _has_password = any(s.get('password') for s in _students_data)
+
         # Available placeholders
         with st.expander("📌 Available Placeholders"):
             placeholders = TemplateManager.get_available_placeholders(
-                st.session_state.get('skip_link_generation', False)
+                general_mode=st.session_state.get('skip_link_generation', False),
+                has_login_id=_has_login_id,
+                has_password=_has_password,
             )
             placeholder_df = pd.DataFrame(placeholders)
             st.table(placeholder_df)
@@ -650,7 +710,9 @@ with tab4:
             # ── Static Preview ────────────────────────────────────────
             st.markdown("**Email Preview (with sample data):**")
             sample_data = TemplateManager.get_sample_data(
-                st.session_state.get('skip_link_generation', False)
+                general_mode=st.session_state.get('skip_link_generation', False),
+                has_login_id=_has_login_id,
+                has_password=_has_password,
             )
             if st.session_state.custom_program_name:
                 sample_data['program_name'] = st.session_state.custom_program_name
@@ -693,7 +755,7 @@ with tab5:
     if _ready_to_send:
         # Build list of students to email
         if st.session_state.skip_link_generation:
-            # Prepare students without links — just name & email
+            # Prepare students without links — just name & email (+ optional login_id/password)
             students_to_email = [
                 {
                     'name': s['name'],
@@ -703,6 +765,8 @@ with tab5:
                     'expires_at': '',
                     'program_name': st.session_state.custom_program_name or '',
                     'round_name': '',
+                    'login_id': s.get('login_id', ''),
+                    'password': s.get('password', ''),
                     'email_status': 'pending',
                 }
                 for s in st.session_state.students
