@@ -14,6 +14,15 @@ class FileHandler:
         return re.match(pattern, str(email).strip()) is not None
 
     @staticmethod
+    def _clean_value(val) -> str:
+        """Convert a cell value to string, preserving integers (e.g. 22 not 22.0)."""
+        if pd.isna(val) or val == '':
+            return ''
+        if isinstance(val, float) and val == int(val):
+            return str(int(val))
+        return str(val).strip()
+
+    @staticmethod
     def read_file(file) -> pd.DataFrame:
         """Read CSV or Excel file"""
         filename = file.name.lower()
@@ -84,7 +93,7 @@ class FileHandler:
         # Handle optional login_id column
         has_login_id = False
         if login_id_column and login_id_column in df.columns:
-            df['login_id'] = df[login_id_column].fillna('').astype(str).str.strip()
+            df['login_id'] = df[login_id_column].apply(FileHandler._clean_value)
             has_login_id = True
         elif login_id_column and login_id_column != df.columns and login_id_column:
             # Column was selected but renamed — check original mapping
@@ -93,7 +102,7 @@ class FileHandler:
         # Handle optional password column
         has_password = False
         if password_column and password_column in df.columns:
-            df['password'] = df[password_column].fillna('').astype(str).str.strip()
+            df['password'] = df[password_column].apply(FileHandler._clean_value)
             has_password = True
 
         # Drop rows where both name and email are missing
