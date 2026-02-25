@@ -694,6 +694,8 @@ with tab5:
                 {
                     'name': s['name'],
                     'email': s['email'],
+                    'login_id': s.get('login_id', ''),
+                    'password': s.get('password', ''),
                     'candidate_id': '',
                     'login_link': '',
                     'expires_at': '',
@@ -705,6 +707,13 @@ with tab5:
             ]
         else:
             students_to_email = [s for s in st.session_state.students_with_links if s.get('login_link') not in (None, 'N/A', '')]
+            # Ensure login_id and password are included from the original students data if missing
+            for s_to_email in students_to_email:
+                original_student = next((s for s in st.session_state.students if s['email'] == s_to_email['email']), {})
+                if 'login_id' not in s_to_email:
+                    s_to_email['login_id'] = original_student.get('login_id', '')
+                if 'password' not in s_to_email:
+                    s_to_email['password'] = original_student.get('password', '')
 
         if not students_to_email:
             if st.session_state.skip_link_generation:

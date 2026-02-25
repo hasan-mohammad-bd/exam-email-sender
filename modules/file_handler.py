@@ -48,9 +48,13 @@ class FileHandler:
         column_mappings = {
             'name': ['name', 'student_name', 'full_name', 'student name', 'fullname', 'candidate_name', 'candidate name'],
             'email': ['email', 'email_address', 'e-mail', 'mail', 'email address', 'student_email', 'student email'],
+            'login_id': ['login_id', 'loginid', 'login_id', 'user_id', 'username', 'login', 'id'],
+            'password': ['password', 'pass', 'pwd', 'login_password'],
         }
 
         resolved_columns = {}
+        required_columns = ['name', 'email']
+        
         for target, options in column_mappings.items():
             found = False
             for option in options:
@@ -58,7 +62,7 @@ class FileHandler:
                     resolved_columns[target] = option
                     found = True
                     break
-            if not found:
+            if not found and target in required_columns:
                 errors.append(f"Required column '{target}' not found. Available columns: {list(df.columns)}")
 
         if errors:
@@ -76,6 +80,17 @@ class FileHandler:
         # Clean email column
         df['email'] = df['email'].astype(str).str.strip().str.lower()
 
+        # Handle optional columns
+        if 'login_id' in df.columns:
+            df['login_id'] = df['login_id'].fillna('').astype(str).str.strip()
+        else:
+            df['login_id'] = ''
+
+        if 'password' in df.columns:
+            df['password'] = df['password'].fillna('').astype(str).str.strip()
+        else:
+            df['password'] = ''
+
         # Remove duplicate emails
         duplicates = df[df.duplicated(subset=['email'], keep='first')]
         if len(duplicates) > 0:
@@ -88,6 +103,8 @@ class FileHandler:
         for idx, row in df.iterrows():
             email = row['email']
             name = row['name']
+            login_id = row['login_id']
+            password = row['password']
 
             if not email or email == 'nan' or email == '':
                 errors.append(f"Row {idx + 2}: Empty email for '{name}'")
@@ -100,6 +117,8 @@ class FileHandler:
             valid_students.append({
                 'name': name,
                 'email': email,
+                'login_id': login_id,
+                'password': password,
             })
 
         if not valid_students:

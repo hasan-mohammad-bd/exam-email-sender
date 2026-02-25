@@ -490,6 +490,8 @@ class EmailSender:
         replacements = {
             '{name}': str(data.get('name', '')),
             '{email}': str(data.get('email', '')),
+            '{login_id}': str(data.get('login_id', '')),
+            '{password}': str(data.get('password', '')),
             '{login_link}': str(data.get('login_link', '')),
             '{candidate_id}': str(data.get('candidate_id', '')),
             '{program_name}': str(data.get('program_name', '')),
