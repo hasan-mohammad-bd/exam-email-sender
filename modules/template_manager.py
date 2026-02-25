@@ -7,6 +7,35 @@ from typing import List, Dict
 class TemplateManager:
 
     @staticmethod
+    def list_templates() -> List[Dict[str, str]]:
+        """List all available templates from the templates/ directory.
+        Returns a list of dicts with 'name' (display name) and 'filename'."""
+        templates_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            'templates'
+        )
+        templates = []
+        if os.path.isdir(templates_dir):
+            for fname in sorted(os.listdir(templates_dir)):
+                if fname.endswith('.html'):
+                    display = fname.replace('_', ' ').replace('.html', '').title()
+                    templates.append({'name': display, 'filename': fname})
+        return templates
+
+    @staticmethod
+    def load_template(filename: str) -> str:
+        """Load a template by filename from the templates/ directory."""
+        template_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            'templates',
+            filename
+        )
+        if os.path.exists(template_path):
+            with open(template_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        raise FileNotFoundError(f"Template '{filename}' not found.")
+
+    @staticmethod
     def get_default_template() -> str:
         """Return default HTML email template"""
         # Try to load from file first

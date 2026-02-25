@@ -100,6 +100,8 @@ def init_session_state():
         # Visual editor state
         'visual_editor_active': False,
         'template_editor_key': 0,
+        # Manual input rows
+        'manual_entry_rows': [{'name': '', 'email': ''}],
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -284,63 +286,155 @@ with tab1:
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab2:
     st.header("Step 2: Upload Student Data")
-    st.markdown("Upload a CSV or Excel file containing student **Name** and **Email** columns.")
+    st.markdown("Upload a file or enter student details manually.")
 
-    # Sample data download
-    with st.expander("📥 Download Sample File"):
-        sample_df = pd.DataFrame({
-            'Name': ['Alice Smith', 'Bob Johnson', 'Charlie Brown'],
-            'Email': ['alice@example.com', 'bob@example.com', 'charlie@example.com']
-        })
-        csv_data = sample_df.to_csv(index=False)
-        st.download_button(
-            label="Download Sample CSV",
-            data=csv_data,
-            file_name="sample_students.csv",
-            mime="text/csv"
-        )
-        st.dataframe(sample_df, use_container_width=True)
-
-    uploaded_file = st.file_uploader(
-        "Choose a CSV or Excel file",
-        type=['csv', 'xlsx', 'xls'],
-        help="File must have 'Name' and 'Email' columns"
+    input_method = st.radio(
+        "Choose input method:",
+        ["📁 Upload File", "✏️ Manual Input"],
+        horizontal=True,
+        key="input_method"
     )
 
-    if uploaded_file is not None:
-        with st.spinner("Processing file..."):
-            students, errors = FileHandler.process_file(uploaded_file)
+    if input_method == "📁 Upload File":
+        # Sample data download
+        with st.expander("📥 Download Sample File"):
+            sample_df = pd.DataFrame({
+                'Name': ['Alice Smith', 'Bob Johnson', 'Charlie Brown'],
+                'Email': ['alice@example.com', 'bob@example.com', 'charlie@example.com']
+            })
+            csv_data = sample_df.to_csv(index=False)
+            st.download_button(
+                label="Download Sample CSV",
+                data=csv_data,
+                file_name="sample_students.csv",
+                mime="text/csv"
+            )
+            st.dataframe(sample_df, use_container_width=True)
 
-        # Show errors
-        if errors:
-            with st.expander(f"⚠️ {len(errors)} Warning(s)/Error(s) Found", expanded=True):
-                for error in errors:
-                    st.warning(error)
+        uploaded_file = st.file_uploader(
+            "Choose a CSV or Excel file",
+            type=['csv', 'xlsx', 'xls'],
+            help="File must have 'Name' and 'Email' columns"
+        )
 
-        # Show valid students
-        if students:
-            st.session_state.students = students
-            st.session_state.file_errors = errors
+        if uploaded_file is not None:
+            with st.spinner("Processing file..."):
+                students, errors = FileHandler.process_file(uploaded_file)
 
-            st.success(f"✅ Successfully loaded **{len(students)}** valid student(s)")
+            # Show errors
+            if errors:
+                with st.expander(f"⚠️ {len(errors)} Warning(s)/Error(s) Found", expanded=True):
+                    for error in errors:
+                        st.warning(error)
 
-            # Preview
-            preview_df = pd.DataFrame(students)
-            st.dataframe(preview_df, use_container_width=True, height=300)
+            # Show valid students
+            if students:
+                st.session_state.students = students
+                st.session_state.file_errors = errors
 
-            # Stats
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total Valid Students", len(students))
-            with col2:
-                st.metric("Warnings/Errors", len(errors))
-            with col3:
-                unique_domains = len(set(s['email'].split('@')[1] for s in students))
-                st.metric("Unique Email Domains", unique_domains)
-        else:
-            st.error("No valid students found in the uploaded file.")
+                st.success(f"✅ Successfully loaded **{len(students)}** valid student(s)")
+
+                # Preview
+                preview_df = pd.DataFrame(students)
+                st.dataframe(preview_df, use_container_width=True, height=300)
+
+                # Stats
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Valid Students", len(students))
+                with col2:
+                    st.metric("Warnings/Errors", len(errors))
+                with col3:
+                    unique_domains = len(set(s['email'].split('@')[1] for s in students))
+                    st.metric("Unique Email Domains", unique_domains)
+            else:
+                st.error("No valid students found in the uploaded file.")
+
     else:
-        if st.session_state.students:
+        # ── Manual Input ────────────────────────────────────────────────────
+        st.markdown("Enter student **Name** and **Email** below. Click ➕ to add more rows.")
+
+        rows = st.session_state.manual_entry_rows
+
+        for idx in range(len(rows)):
+            col_name, col_email, col_del = st.columns([3, 4, 1])
+            with col_name:
+                rows[idx]['name'] = st.text_input(
+                    "Name", value=rows[idx]['name'],
+                    key=f"manual_name_{idx}",
+                    placeholder="e.g. Alice Smith",
+                    label_visibility="collapsed" if idx > 0 else "visible"
+                )
+            with col_email:
+                rows[idx]['email'] = st.text_input(
+                    "Email", value=rows[idx]['email'],
+                    key=f"manual_email_{idx}",
+                    placeholder="e.g. alice@example.com",
+                    label_visibility="collapsed" if idx > 0 else "visible"
+                )
+            with col_del:
+                if idx == 0:
+                    st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+                if len(rows) > 1:
+                    if st.button("🗑️", key=f"manual_del_{idx}", help="Remove this row"):
+                        rows.pop(idx)
+                        st.rerun()
+
+        # Add row button
+        if st.button("➕ Add Another", key="add_manual_row"):
+            rows.append({'name': '', 'email': ''})
+            st.rerun()
+
+        st.markdown("---")
+
+        if st.button("✅ Load Entries", type="primary"):
+            manual_students = []
+            manual_errors = []
+            seen_emails = set()
+
+            for i, row in enumerate(rows, start=1):
+                name = row['name'].strip()
+                email = row['email'].strip().lower()
+
+                if not name and not email:
+                    continue  # skip empty rows
+
+                if not email:
+                    manual_errors.append(f"Row {i}: Email is required.")
+                    continue
+
+                if not name:
+                    name = 'Unknown'
+
+                if not FileHandler.validate_email(email):
+                    manual_errors.append(f"Row {i}: Invalid email format '{email}'")
+                    continue
+
+                if email in seen_emails:
+                    manual_errors.append(f"Row {i}: Duplicate email '{email}' removed")
+                    continue
+
+                seen_emails.add(email)
+                manual_students.append({'name': name, 'email': email})
+
+            if manual_errors:
+                with st.expander(f"⚠️ {len(manual_errors)} Warning(s)/Error(s)", expanded=True):
+                    for err in manual_errors:
+                        st.warning(err)
+
+            if manual_students:
+                st.session_state.students = manual_students
+                st.session_state.file_errors = manual_errors
+                st.success(f"✅ Successfully loaded **{len(manual_students)}** student(s)")
+
+                preview_df = pd.DataFrame(manual_students)
+                st.dataframe(preview_df, use_container_width=True, height=300)
+            elif not manual_errors:
+                st.error("Please enter at least one name and email.")
+
+    # Show previously loaded data regardless of input method
+    if input_method == "📁 Upload File" and st.session_state.students:
+        if not (uploaded_file if 'uploaded_file' in dir() else None):
             st.info(f"📄 Previously loaded: **{len(st.session_state.students)}** student(s)")
             preview_df = pd.DataFrame(st.session_state.students)
             st.dataframe(preview_df, use_container_width=True, height=200)
@@ -461,6 +555,25 @@ with tab4:
 
     with col_template:
         st.subheader("✏️ Template Editor")
+
+        # Template selector dropdown
+        available_templates = TemplateManager.list_templates()
+        if available_templates:
+            template_names = [t['name'] for t in available_templates]
+            selected_template = st.selectbox(
+                "📄 Select Template",
+                options=template_names,
+                index=None,
+                placeholder="Choose a template...",
+                help="Pick a saved template to load into the editor.",
+            )
+            if selected_template:
+                chosen = next(t for t in available_templates if t['name'] == selected_template)
+                loaded_html = TemplateManager.load_template(chosen['filename'])
+                if loaded_html != st.session_state.email_template:
+                    st.session_state.email_template = loaded_html
+                    st.session_state.template_editor_key += 1
+                    st.rerun()
 
         # Custom program name override
         custom_program_name = st.text_input(
