@@ -512,4 +512,13 @@ class EmailSender:
         for placeholder, value in replacements.items():
             result = result.replace(placeholder, value)
 
+        # Add ses:no-track to <a> tags containing the login_link to prevent
+        # AWS SES click tracking from rewriting the URL
+        login_link = str(data.get('login_link', ''))
+        if login_link:
+            result = result.replace(
+                f'<a href="{login_link}"',
+                f'<a ses:no-track href="{login_link}"'
+            )
+
         return result
