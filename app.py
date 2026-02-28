@@ -735,7 +735,7 @@ with tab4:
                 # Only load when the user picks a different template
                 if chosen['filename'] != st.session_state.loaded_template_filename:
                     loaded_html = TemplateManager.load_template(chosen['filename'])
-                    saved_subject = TemplateManager.get_template_subject(chosen['filename'])
+                    saved_subject = chosen.get('subject', '')
                     st.session_state.email_template = loaded_html
                     st.session_state.loaded_template_filename = chosen['filename']
                     st.session_state.template_editor_key += 1
