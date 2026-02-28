@@ -1,9 +1,10 @@
 {
   "template_subjects": {
-    "default_template.html": "Assessment Link & Login Credentials | TAM \u2013 Digital Banking | 28 February",
-    "general_template.html": "Assessment Link & Login Credentials | TAM \u2013 Digital Banking | 28 February",
-    "ai_usability_test_28feb.html": "Assessment Link & Login Credentials | TAM \u2013 Digital Banking | 28 February"
+    "default_template.html": "Assessment Link & Login Credentials | TAM – Digital Banking | 28 February",
+    "general_template.html": "Assessment Link & Login Credentials | TAM – Digital Banking | 28 February",
+    "ai_usability_test_28feb.html": "Assessment Link & Login Credentials | TAM – Digital Banking | 28 February",
+    "thank_you_email_template.html": "Tank you message "
   },
   "pinned_template": "general_template.html",
-  "pinned_subject": "Assessment Link & Login Credentials | TAM \u2013 Digital Banking | 28 February"
+  "pinned_subject": "Assessment Link & Login Credentials | TAM – Digital Banking | 28 February"
 }

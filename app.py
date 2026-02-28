@@ -101,6 +101,7 @@ def init_session_state():
         # Visual editor state
         'visual_editor_active': False,
         'template_editor_key': 0,
+        'loaded_template_filename': None,
         # Manual input rows
         'manual_entry_rows': [{'name': '', 'email': '', 'login_id': '', 'password': ''}],
     }
@@ -708,19 +709,74 @@ with tab4:
         available_templates = TemplateManager.list_templates()
         if available_templates:
             template_names = [t['name'] for t in available_templates]
-            selected_template = st.selectbox(
-                "📄 Select Template",
-                options=template_names,
-                index=None,
-                placeholder="Choose a template...",
-                help="Pick a saved template to load into the editor.",
-            )
+            sel_col, del_col = st.columns([5, 1])
+            with sel_col:
+                selected_template = st.selectbox(
+                    "📄 Select Template",
+                    options=template_names,
+                    index=None,
+                    placeholder="Choose a template...",
+                    help="Pick a saved template to load into the editor.",
+                )
+            with del_col:
+                st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+                delete_clicked = st.button("🗑️", key="delete_template_btn", help="Delete selected template")
+
             if selected_template:
                 chosen = next(t for t in available_templates if t['name'] == selected_template)
-                loaded_html = TemplateManager.load_template(chosen['filename'])
-                if loaded_html != st.session_state.email_template:
+
+                # Handle delete
+                if delete_clicked:
+                    TemplateManager.delete_template(chosen['filename'])
+                    st.session_state.loaded_template_filename = None
+                    st.success(f"Template '{selected_template}' deleted.")
+                    st.rerun()
+
+                # Only load when the user picks a different template
+                if chosen['filename'] != st.session_state.loaded_template_filename:
+                    loaded_html = TemplateManager.load_template(chosen['filename'])
+                    saved_subject = TemplateManager.get_template_subject(chosen['filename'])
                     st.session_state.email_template = loaded_html
+                    st.session_state.loaded_template_filename = chosen['filename']
                     st.session_state.template_editor_key += 1
+                    if saved_subject:
+                        st.session_state.email_subject = saved_subject
+                    st.rerun()
+
+        # Add New Template
+        with st.expander("➕ Add New Template"):
+            new_tpl_name = st.text_input(
+                "Template Name *",
+                key="new_tpl_name",
+                placeholder="e.g. Marketing Campaign Q1",
+            )
+            new_tpl_subject = st.text_input(
+                "Default Subject *",
+                key="new_tpl_subject",
+                placeholder="e.g. Your Exam Link | Program Name",
+            )
+            new_tpl_html = st.text_area(
+                "HTML Content *",
+                key="new_tpl_html",
+                height=200,
+                placeholder="Paste your HTML template here... Use {name}, {email}, {program_name} etc.",
+            )
+
+            if st.button("💾 Save Template", key="save_new_tpl"):
+                if not new_tpl_name.strip():
+                    st.error("Please enter a template name.")
+                elif not new_tpl_subject.strip():
+                    st.error("Please enter a default subject.")
+                elif not new_tpl_html.strip():
+                    st.error("Please enter the HTML content.")
+                else:
+                    saved_filename = TemplateManager.save_template(
+                        new_tpl_name, new_tpl_subject, new_tpl_html
+                    )
+                    st.session_state.email_template = new_tpl_html
+                    st.session_state.email_subject = new_tpl_subject
+                    st.session_state.template_editor_key += 1
+                    st.success(f"Template '{new_tpl_name}' saved as `{saved_filename}`!")
                     st.rerun()
 
         # Custom program name override

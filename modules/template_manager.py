@@ -1,26 +1,102 @@
 """Template manager for email templates"""
 
 import os
-from typing import List, Dict
+import json
+import re
+from typing import List, Dict, Optional
 
 
 class TemplateManager:
 
+    _PREFERENCES_FILE = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        'config',
+        'user_preferences.json',
+    )
+
+    @classmethod
+    def _load_preferences(cls) -> dict:
+        """Load user_preferences.json (creates default if missing)."""
+        if os.path.exists(cls._PREFERENCES_FILE):
+            with open(cls._PREFERENCES_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        return {"template_subjects": {}}
+
+    @classmethod
+    def _save_preferences(cls, data: dict) -> None:
+        """Persist user_preferences.json."""
+        os.makedirs(os.path.dirname(cls._PREFERENCES_FILE), exist_ok=True)
+        with open(cls._PREFERENCES_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
     @staticmethod
     def list_templates() -> List[Dict[str, str]]:
         """List all available templates from the templates/ directory.
-        Returns a list of dicts with 'name' (display name) and 'filename'."""
+        Returns a list of dicts with 'name' (display name), 'filename', and 'subject'."""
         templates_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             'templates'
         )
+        prefs = TemplateManager._load_preferences()
+        subjects = prefs.get('template_subjects', {})
+
         templates = []
         if os.path.isdir(templates_dir):
             for fname in sorted(os.listdir(templates_dir)):
                 if fname.endswith('.html'):
                     display = fname.replace('_', ' ').replace('.html', '').title()
-                    templates.append({'name': display, 'filename': fname})
+                    templates.append({
+                        'name': display,
+                        'filename': fname,
+                        'subject': subjects.get(fname, ''),
+                    })
         return templates
+
+    @classmethod
+    def save_template(cls, template_name: str, subject: str, html_content: str) -> str:
+        """Save a new template file and store its subject in preferences.
+        Returns the generated filename."""
+        # Sanitise name -> filename
+        safe = re.sub(r'[^a-z0-9]+', '_', template_name.strip().lower()).strip('_')
+        filename = f"{safe}.html"
+
+        templates_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            'templates',
+        )
+        os.makedirs(templates_dir, exist_ok=True)
+        with open(os.path.join(templates_dir, filename), 'w', encoding='utf-8') as f:
+            f.write(html_content)
+
+        # Store subject mapping
+        prefs = cls._load_preferences()
+        prefs.setdefault('template_subjects', {})[filename] = subject
+        cls._save_preferences(prefs)
+
+        return filename
+
+    @classmethod
+    def delete_template(cls, filename: str) -> bool:
+        """Delete a template file and remove its metadata. Returns True on success."""
+        templates_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            'templates',
+        )
+        filepath = os.path.join(templates_dir, filename)
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
+        # Remove subject mapping
+        prefs = cls._load_preferences()
+        prefs.get('template_subjects', {}).pop(filename, None)
+        cls._save_preferences(prefs)
+        return True
+
+    @classmethod
+    def get_template_subject(cls, filename: str) -> str:
+        """Return the saved subject for a template, or empty string."""
+        prefs = cls._load_preferences()
+        return prefs.get('template_subjects', {}).get(filename, '')
 
     @staticmethod
     def load_template(filename: str) -> str:
