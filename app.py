@@ -70,7 +70,7 @@ def init_session_state():
         'email_results': [],
         'file_errors': [],
         'email_template': TemplateManager.get_default_template(),
-        'email_subject': 'Assessment Link & Login Credentials | TAM – Digital Banking | 26 February',
+        'email_subject': 'Assessment Link & Login Credentials | TAM – Digital Banking | 28 February',
         'program_id': int(Config.DEFAULT_PROGRAM_ID) if Config.DEFAULT_PROGRAM_ID else 1,
         'round_id': int(Config.DEFAULT_ROUND_ID) if Config.DEFAULT_ROUND_ID else 1,
         'session_time': Config.DEFAULT_SESSION_TIME or '730h',
@@ -389,6 +389,97 @@ with tab2:
     else:
         # ── Manual Input ────────────────────────────────────────────────────
         st.markdown("Enter student **Name** and **Email** below. **Login ID** and **Password** are optional. Click ➕ to add more rows.")
+
+        # ── Quick Search from User Data ─────────────────────────────────────
+        user_data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'user-data')
+        user_data_files = [f for f in os.listdir(user_data_path) if f.endswith(('.xlsx', '.xls', '.csv'))] if os.path.isdir(user_data_path) else []
+
+        if user_data_files:
+            with st.expander("🔍 Search User Data to Auto-Fill", expanded=True):
+                search_file = st.selectbox(
+                    "Select user data file",
+                    options=user_data_files,
+                    key="search_user_data_file",
+                )
+
+                # Load the selected file
+                search_file_path = os.path.join(user_data_path, search_file)
+                try:
+                    if search_file.endswith('.csv'):
+                        user_df = pd.read_csv(search_file_path)
+                    else:
+                        user_df = pd.read_excel(search_file_path)
+
+                    # Normalize column names to lowercase for matching
+                    col_map = {c.lower().strip(): c for c in user_df.columns}
+                    name_col = col_map.get('name', col_map.get('candidate_name', None))
+                    email_col = col_map.get('email', col_map.get('candidate_email', None))
+                    login_col = col_map.get('login_id', col_map.get('loginid', col_map.get('login', None)))
+                    pass_col = col_map.get('password', col_map.get('pass', None))
+
+                    if name_col and email_col:
+                        search_query = st.text_input(
+                            "Search by name or email",
+                            key="user_search_query",
+                            placeholder="Type a name or email to search...",
+                        )
+
+                        if search_query and len(search_query) >= 2:
+                            q = search_query.lower()
+                            mask = (
+                                user_df[name_col].astype(str).str.lower().str.contains(q, na=False) |
+                                user_df[email_col].astype(str).str.lower().str.contains(q, na=False)
+                            )
+                            results = user_df[mask].head(20)
+
+                            if len(results) > 0:
+                                st.caption(f"Found {len(results)} result(s) — click a row number to auto-fill")
+
+                                # Build display columns
+                                display_cols = [name_col, email_col]
+                                if login_col:
+                                    display_cols.append(login_col)
+                                if pass_col:
+                                    display_cols.append(pass_col)
+
+                                for i, (_, row_data) in enumerate(results.iterrows()):
+                                    r_name = str(row_data[name_col]) if pd.notna(row_data[name_col]) else ''
+                                    r_email = str(row_data[email_col]) if pd.notna(row_data[email_col]) else ''
+                                    r_login = str(row_data[login_col]) if login_col and pd.notna(row_data[login_col]) else ''
+                                    r_pass = str(row_data[pass_col]) if pass_col and pd.notna(row_data[pass_col]) else ''
+
+                                    # Clean up float-like integers (e.g. 123456.0 -> 123456)
+                                    for val_name in ['r_login', 'r_pass']:
+                                        val = locals()[val_name]
+                                        if val.endswith('.0'):
+                                            locals()[val_name] = val[:-2]
+                                    r_login = r_login[:-2] if r_login.endswith('.0') else r_login
+                                    r_pass = r_pass[:-2] if r_pass.endswith('.0') else r_pass
+
+                                    btn_label = f"{r_name}  |  {r_email}"
+                                    if st.button(btn_label, key=f"search_result_{i}", use_container_width=True):
+                                        # Find the first empty row or add a new one
+                                        rows = st.session_state.manual_entry_rows
+                                        target_idx = None
+                                        for ri, r in enumerate(rows):
+                                            if not r.get('name', '').strip() and not r.get('email', '').strip():
+                                                target_idx = ri
+                                                break
+                                        if target_idx is None:
+                                            rows.append({'name': '', 'email': '', 'login_id': '', 'password': ''})
+                                            target_idx = len(rows) - 1
+
+                                        rows[target_idx]['name'] = r_name
+                                        rows[target_idx]['email'] = r_email
+                                        rows[target_idx]['login_id'] = r_login
+                                        rows[target_idx]['password'] = r_pass
+                                        st.rerun()
+                            else:
+                                st.info("No matching users found.")
+                    else:
+                        st.warning("User data file must have 'name' and 'email' columns.")
+                except Exception as e:
+                    st.error(f"Error reading user data file: {e}")
 
         rows = st.session_state.manual_entry_rows
 
