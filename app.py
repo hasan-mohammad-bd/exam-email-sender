@@ -1362,18 +1362,17 @@ with tab5:
         if st.button("📨 Send All Emails", type="primary", disabled=not confirm):
             _confirm_send_dialog()
 
-        # Step 1: the dialog's "Confirm & Send" sets do_send_emails and reruns,
-        # which closes the modal. Do NOT start sending in that same run — the
-        # blocking send loop would keep the just-dismissed overlay on screen.
-        # Trigger one more lightweight rerun so the modal is visibly gone first.
+        # The dialog's "Confirm & Send" sets do_send_emails and calls st.rerun(),
+        # which closes the modal. We land here on that next run with the dialog
+        # gone. Pause ~1s (inside a spinner so the closed state is painted) before
+        # kicking off the blocking send loop, so the modal is visibly dismissed
+        # first. (Don't chain extra st.rerun() calls — Streamlit batches chained
+        # reruns into a single frontend repaint, which would leave the overlay up
+        # until sending finished.)
         if st.session_state.get('do_send_emails'):
             st.session_state.do_send_emails = False
-            st.session_state.do_send_emails_now = True
-            st.rerun()
-
-        # Step 2: modal is now closed; actually send the emails.
-        if st.session_state.get('do_send_emails_now'):
-            st.session_state.do_send_emails_now = False
+            with st.spinner("Starting…"):
+                time.sleep(1)
             if not st.session_state.aws_access_key or not st.session_state.aws_secret_key:
                 st.error("❌ Please configure AWS SES credentials in Tab 1.")
             else:
