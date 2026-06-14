@@ -1349,22 +1349,31 @@ with tab5:
             dlg_col1, dlg_col2 = st.columns(2)
             with dlg_col1:
                 if st.button("✅ Confirm & Send", type="primary", use_container_width=True):
-                    st.session_state.show_send_confirmation = False
                     st.session_state.do_send_emails = True
                     st.rerun()
             with dlg_col2:
                 if st.button("Cancel", use_container_width=True):
-                    st.session_state.show_send_confirmation = False
                     st.rerun()
 
+        # Open the dialog only on the button press. Streamlit keeps it open across
+        # internal reruns and closes it on the ✕ — so we must NOT re-open it from a
+        # sticky session flag (that overlay would reappear on every rerun, even on
+        # other tabs, e.g. after clicking Save in the Template tab).
         if st.button("📨 Send All Emails", type="primary", disabled=not confirm):
-            st.session_state.show_send_confirmation = True
-
-        if st.session_state.get('show_send_confirmation'):
             _confirm_send_dialog()
 
+        # Step 1: the dialog's "Confirm & Send" sets do_send_emails and reruns,
+        # which closes the modal. Do NOT start sending in that same run — the
+        # blocking send loop would keep the just-dismissed overlay on screen.
+        # Trigger one more lightweight rerun so the modal is visibly gone first.
         if st.session_state.get('do_send_emails'):
             st.session_state.do_send_emails = False
+            st.session_state.do_send_emails_now = True
+            st.rerun()
+
+        # Step 2: modal is now closed; actually send the emails.
+        if st.session_state.get('do_send_emails_now'):
+            st.session_state.do_send_emails_now = False
             if not st.session_state.aws_access_key or not st.session_state.aws_secret_key:
                 st.error("❌ Please configure AWS SES credentials in Tab 1.")
             else:
