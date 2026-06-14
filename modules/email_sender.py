@@ -489,6 +489,25 @@ class EmailSender:
                     writer = csv.DictWriter(f, fieldnames=keys)
                     writer.writeheader()
                     writer.writerows(results)
+                EmailSender._prune_old_reports()
+        except Exception:
+            pass
+
+    @staticmethod
+    def _prune_old_reports(keep: int = 3):
+        """Keep only the latest `keep` auto-saved Email Report CSVs, delete older ones."""
+        try:
+            reports = [
+                os.path.join(CHECKPOINT_DIR, f)
+                for f in os.listdir(CHECKPOINT_DIR)
+                if f.startswith('Email Report - ') and f.endswith('.csv')
+            ]
+            reports.sort(key=os.path.getmtime, reverse=True)
+            for stale in reports[keep:]:
+                try:
+                    os.remove(stale)
+                except Exception:
+                    pass
         except Exception:
             pass
 

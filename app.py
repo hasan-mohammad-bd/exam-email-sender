@@ -393,15 +393,56 @@ with tab2:
 
         # ── Quick Search from User Data ─────────────────────────────────────
         user_data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'user-data')
-        user_data_files = [f for f in os.listdir(user_data_path) if f.endswith(('.xlsx', '.xls', '.csv'))] if os.path.isdir(user_data_path) else []
+        os.makedirs(user_data_path, exist_ok=True)
+        user_data_files = sorted(
+            f for f in os.listdir(user_data_path)
+            if f.endswith(('.xlsx', '.xls', '.csv')) and not f.startswith(('.', '~'))
+        )
 
-        if user_data_files:
-            with st.expander("🔍 Search User Data to Auto-Fill", expanded=True):
-                search_file = st.selectbox(
-                    "Select user data file",
-                    options=user_data_files,
-                    key="search_user_data_file",
-                )
+        with st.expander("🔍 Search User Data to Auto-Fill", expanded=True):
+            # ── Manage user data files (upload / delete) ────────────────────
+            uploaded_user_files = st.file_uploader(
+                "Add user data file(s)",
+                type=['xlsx', 'xls', 'csv'],
+                accept_multiple_files=True,
+                key=f"user_data_uploader_{st.session_state.get('user_data_uploader_key', 0)}",
+                help="Upload Excel/CSV files to make them available for search & auto-fill.",
+            )
+            if uploaded_user_files:
+                saved_any = False
+                for uf in uploaded_user_files:
+                    dest = os.path.join(user_data_path, os.path.basename(uf.name))
+                    try:
+                        with open(dest, 'wb') as out:
+                            out.write(uf.getbuffer())
+                        saved_any = True
+                    except Exception as e:
+                        st.error(f"Could not save '{uf.name}': {e}")
+                if saved_any:
+                    st.session_state['user_data_uploader_key'] = st.session_state.get('user_data_uploader_key', 0) + 1
+                    st.success(f"Added {len(uploaded_user_files)} file(s).")
+                    st.rerun()
+
+            if not user_data_files:
+                st.info("No user data files yet. Upload one above to enable search.")
+            else:
+                col_select, col_delete = st.columns([6, 1])
+                with col_select:
+                    search_file = st.selectbox(
+                        "Select user data file",
+                        options=user_data_files,
+                        key="search_user_data_file",
+                    )
+                with col_delete:
+                    st.markdown("<div style='height: 1.85rem'></div>", unsafe_allow_html=True)
+                    if st.button("🗑️", key="delete_user_data_file", help=f"Delete '{search_file}'", use_container_width=True):
+                        try:
+                            os.remove(os.path.join(user_data_path, search_file))
+                            st.session_state.pop('search_user_data_file', None)
+                            st.success(f"Deleted '{search_file}'.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Could not delete '{search_file}': {e}")
 
                 # Load the selected file
                 search_file_path = os.path.join(user_data_path, search_file)
@@ -417,12 +458,13 @@ with tab2:
                     email_col = col_map.get('email', col_map.get('candidate_email', None))
                     login_col = col_map.get('login_id', col_map.get('loginid', col_map.get('login', None)))
                     pass_col = col_map.get('password', col_map.get('pass', None))
+                    candidate_col = col_map.get('candidate_id', col_map.get('candidateid', col_map.get('candidate id', None)))
 
                     if name_col and email_col:
                         search_query = st.text_input(
-                            "Search by name or email",
+                            "Search by name, email" + (", or candidate ID" if candidate_col else ""),
                             key="user_search_query",
-                            placeholder="Type a name or email to search...",
+                            placeholder="Type a name, email" + (", or candidate ID" if candidate_col else "") + " to search...",
                         )
 
                         if search_query and len(search_query) >= 2:
@@ -431,6 +473,8 @@ with tab2:
                                 user_df[name_col].astype(str).str.lower().str.contains(q, na=False) |
                                 user_df[email_col].astype(str).str.lower().str.contains(q, na=False)
                             )
+                            if candidate_col:
+                                mask = mask | user_df[candidate_col].astype(str).str.lower().str.contains(q, na=False)
                             results = user_df[mask].head(20)
 
                             if len(results) > 0:
@@ -448,6 +492,8 @@ with tab2:
                                     r_email = str(row_data[email_col]) if pd.notna(row_data[email_col]) else ''
                                     r_login = str(row_data[login_col]) if login_col and pd.notna(row_data[login_col]) else ''
                                     r_pass = str(row_data[pass_col]) if pass_col and pd.notna(row_data[pass_col]) else ''
+                                    r_candidate = str(row_data[candidate_col]) if candidate_col and pd.notna(row_data[candidate_col]) else ''
+                                    r_candidate = r_candidate[:-2] if r_candidate.endswith('.0') else r_candidate
 
                                     # Clean up float-like integers (e.g. 123456.0 -> 123456)
                                     for val_name in ['r_login', 'r_pass']:
@@ -458,6 +504,8 @@ with tab2:
                                     r_pass = r_pass[:-2] if r_pass.endswith('.0') else r_pass
 
                                     btn_label = f"{r_name}  |  {r_email}"
+                                    if r_candidate:
+                                        btn_label += f"  |  ID: {r_candidate}"
                                     if st.button(btn_label, key=f"search_result_{i}", use_container_width=True):
                                         # Find the first empty row or add a new one
                                         rows = st.session_state.manual_entry_rows
@@ -705,90 +753,75 @@ with tab4:
     with col_template:
         st.subheader("✏️ Template Editor")
 
-        # Template selector dropdown
+        loaded_fn = st.session_state.loaded_template_filename
+        loaded_name = (
+            loaded_fn.replace('_', ' ').replace('.html', '').title()
+            if loaded_fn else None
+        )
+
+        # ── Load a saved template ───────────────────────────────────────────
         available_templates = TemplateManager.list_templates()
         if available_templates:
             template_names = [t['name'] for t in available_templates]
-            sel_col, del_col = st.columns([5, 1])
+            current_index = (
+                template_names.index(loaded_name)
+                if loaded_name in template_names else None
+            )
+            sel_col, del_col = st.columns([6, 1])
             with sel_col:
                 selected_template = st.selectbox(
-                    "📄 Select Template",
+                    "📄 Load a saved template",
                     options=template_names,
-                    index=None,
-                    placeholder="Choose a template...",
-                    help="Pick a saved template to load into the editor.",
+                    index=current_index,
+                    placeholder="Choose a template to edit...",
+                    help="Pick a saved template to load it into the editor below.",
                 )
             with del_col:
                 st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-                delete_clicked = st.button("🗑️", key="delete_template_btn", help="Delete selected template")
+                delete_clicked = st.button(
+                    "🗑️", key="delete_template_btn",
+                    help="Delete the selected template",
+                    use_container_width=True,
+                    disabled=selected_template is None,
+                )
 
             if selected_template:
                 chosen = next(t for t in available_templates if t['name'] == selected_template)
 
-                # Handle delete
                 if delete_clicked:
                     TemplateManager.delete_template(chosen['filename'])
                     st.session_state.loaded_template_filename = None
-                    st.success(f"Template '{selected_template}' deleted.")
+                    st.toast(f"Deleted template '{selected_template}'", icon="🗑️")
                     st.rerun()
 
-                # Only load when the user picks a different template
+                # Load only when the user switches to a different template
                 if chosen['filename'] != st.session_state.loaded_template_filename:
-                    loaded_html = TemplateManager.load_template(chosen['filename'])
-                    saved_subject = chosen.get('subject', '')
-                    st.session_state.email_template = loaded_html
+                    st.session_state.email_template = TemplateManager.load_template(chosen['filename'])
                     st.session_state.loaded_template_filename = chosen['filename']
                     st.session_state.template_editor_key += 1
-                    if saved_subject:
-                        st.session_state.email_subject = saved_subject
+                    if chosen.get('subject', ''):
+                        st.session_state.email_subject = chosen['subject']
                     st.rerun()
+        else:
+            st.caption("No saved templates yet — build one below and save it.")
 
-        # Add New Template
-        with st.expander("➕ Add New Template"):
-            new_tpl_name = st.text_input(
-                "Template Name *",
-                key="new_tpl_name",
-                placeholder="e.g. Marketing Campaign Q1",
-            )
-            new_tpl_subject = st.text_input(
-                "Default Subject *",
-                key="new_tpl_subject",
-                placeholder="e.g. Your Exam Link | Program Name",
-            )
-            new_tpl_html = st.text_area(
-                "HTML Content *",
-                key="new_tpl_html",
-                height=200,
-                placeholder="Paste your HTML template here... Use {name}, {email}, {program_name} etc.",
-            )
+        # Status line: what is currently in the editor
+        if loaded_name:
+            st.caption(f"📝 Editing saved template: **{loaded_name}**")
+        else:
+            st.caption("📝 Editing an unsaved draft")
 
-            if st.button("💾 Save Template", key="save_new_tpl"):
-                if not new_tpl_name.strip():
-                    st.error("Please enter a template name.")
-                elif not new_tpl_subject.strip():
-                    st.error("Please enter a default subject.")
-                elif not new_tpl_html.strip():
-                    st.error("Please enter the HTML content.")
-                else:
-                    saved_filename = TemplateManager.save_template(
-                        new_tpl_name, new_tpl_subject, new_tpl_html
-                    )
-                    st.session_state.email_template = new_tpl_html
-                    st.session_state.email_subject = new_tpl_subject
-                    st.session_state.template_editor_key += 1
-                    st.success(f"Template '{new_tpl_name}' saved as `{saved_filename}`!")
-                    st.rerun()
+        st.divider()
 
-        # Custom program name override
+        # ── Editor fields ───────────────────────────────────────────────────
         custom_program_name = st.text_input(
             "Program Name (override)",
             value=st.session_state.custom_program_name,
-            help="Set a custom program name to replace {program_name} in subject & template. Leave empty to use the name from API.",
+            help="Replaces {program_name} in the subject & template. Leave empty to use the name from the API.",
             placeholder="e.g. Software Engineering Assessment"
         )
         st.session_state.custom_program_name = custom_program_name
 
-        # Email subject
         email_subject = st.text_input(
             "Email Subject",
             value=st.session_state.email_subject,
@@ -806,15 +839,61 @@ with tab4:
         )
         st.session_state.email_template = email_template
 
-        # Reset to default
-        if st.button("🔄 Reset to Default Template"):
-            if st.session_state.skip_link_generation:
-                st.session_state.email_template = TemplateManager.get_general_email_template()
-                st.session_state.email_subject = 'Invitation to Online Assessment | TAM – Digital Banking | 26 February'
-            else:
-                st.session_state.email_template = TemplateManager.get_default_template()
-                st.session_state.email_subject = 'Assessment Link & Login Credentials | TAM – Digital Banking | 26 February'
-            st.rerun()
+        # ── Action row: Save / Save as new / Reset ──────────────────────────
+        if loaded_name:
+            c_save, c_saveas, c_reset = st.columns(3)
+            with c_save:
+                if st.button("💾 Save", key="save_overwrite_tpl",
+                             use_container_width=True,
+                             help=f"Overwrite '{loaded_name}' with the current subject & HTML."):
+                    TemplateManager.update_template(loaded_fn, email_subject, email_template)
+                    st.toast(f"Saved '{loaded_name}'", icon="✅")
+                    st.rerun()
+        else:
+            c_saveas, c_reset = st.columns(2)
+
+        with c_saveas:
+            if st.button("📑 Save as new", key="save_as_toggle", use_container_width=True):
+                st.session_state.show_save_as = not st.session_state.get('show_save_as', False)
+        with c_reset:
+            if st.button("🔄 Reset", key="reset_tpl", use_container_width=True,
+                         help="Reset the editor to the built-in default template."):
+                if st.session_state.skip_link_generation:
+                    st.session_state.email_template = TemplateManager.get_general_email_template()
+                    st.session_state.email_subject = 'Invitation to Online Assessment | TAM – Digital Banking | 26 February'
+                else:
+                    st.session_state.email_template = TemplateManager.get_default_template()
+                    st.session_state.email_subject = 'Assessment Link & Login Credentials | TAM – Digital Banking | 26 February'
+                st.session_state.loaded_template_filename = None
+                st.session_state.template_editor_key += 1
+                st.rerun()
+
+        # Inline "Save as new" form (revealed by the button above)
+        if st.session_state.get('show_save_as', False):
+            with st.container(border=True):
+                st.markdown("**Save as a new template**")
+                save_as_name = st.text_input(
+                    "New template name",
+                    key="save_as_name",
+                    placeholder="e.g. Marketing Campaign Q1",
+                )
+                c_confirm, c_cancel = st.columns(2)
+                with c_confirm:
+                    if st.button("💾 Save", key="save_as_confirm", use_container_width=True):
+                        if not save_as_name.strip():
+                            st.error("Please enter a name for the new template.")
+                        else:
+                            new_fn = TemplateManager.save_template(
+                                save_as_name, email_subject, email_template
+                            )
+                            st.session_state.loaded_template_filename = new_fn
+                            st.session_state.show_save_as = False
+                            st.toast(f"Saved new template '{save_as_name.strip()}'", icon="✅")
+                            st.rerun()
+                with c_cancel:
+                    if st.button("Cancel", key="save_as_cancel", use_container_width=True):
+                        st.session_state.show_save_as = False
+                        st.rerun()
 
     with col_preview:
         st.subheader("👁️ Preview")
@@ -1245,7 +1324,47 @@ with tab5:
             value=False
         )
 
+        # Final-review confirmation modal — last check before sending
+        @st.dialog("📋 Final Review — Confirm Before Sending", width="large")
+        def _confirm_send_dialog():
+            review_recipient = students_to_email[0] if students_to_email else {}
+            review_subject = EmailSender._replace_placeholders(
+                st.session_state.email_subject, review_recipient
+            )
+            review_html = EmailSender._replace_placeholders(
+                st.session_state.email_template, review_recipient
+            )
+            st.markdown(
+                f"You're about to send **{len(students_to_email)}** email(s). "
+                "Review the exact subject and content below before sending."
+            )
+            st.markdown(f"**Subject:** {review_subject}")
+            if review_recipient.get('email'):
+                st.caption(
+                    "Preview rendered for the first recipient: "
+                    f"{review_recipient.get('name', '')} <{review_recipient.get('email', '')}>"
+                )
+            st.components.v1.html(review_html, height=400, scrolling=True)
+            st.markdown("---")
+            dlg_col1, dlg_col2 = st.columns(2)
+            with dlg_col1:
+                if st.button("✅ Confirm & Send", type="primary", use_container_width=True):
+                    st.session_state.show_send_confirmation = False
+                    st.session_state.do_send_emails = True
+                    st.rerun()
+            with dlg_col2:
+                if st.button("Cancel", use_container_width=True):
+                    st.session_state.show_send_confirmation = False
+                    st.rerun()
+
         if st.button("📨 Send All Emails", type="primary", disabled=not confirm):
+            st.session_state.show_send_confirmation = True
+
+        if st.session_state.get('show_send_confirmation'):
+            _confirm_send_dialog()
+
+        if st.session_state.get('do_send_emails'):
+            st.session_state.do_send_emails = False
             if not st.session_state.aws_access_key or not st.session_state.aws_secret_key:
                 st.error("❌ Please configure AWS SES credentials in Tab 1.")
             else:
@@ -1498,6 +1617,15 @@ with tab6:
         )
         crash_reports = [f for f in report_files if f.lower().startswith('crash')]
         normal_reports = [f for f in report_files if not f.lower().startswith('crash') and not f.startswith('checkpoint_')]
+
+        # Keep only the latest 3 auto-saved reports; delete older ones from disk.
+        normal_reports.sort(key=lambda f: os.path.getmtime(os.path.join(reports_dir, f)), reverse=True)
+        for stale in normal_reports[3:]:
+            try:
+                os.remove(os.path.join(reports_dir, stale))
+            except Exception:
+                pass
+        normal_reports = normal_reports[:3]
 
         all_reports = crash_reports + normal_reports
 
