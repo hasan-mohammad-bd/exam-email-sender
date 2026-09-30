@@ -4,7 +4,12 @@
     "general_template.html": "Assessment Link & Login Credentials | TAM – Digital Banking | 28 February",
     "ai_usability_test_28feb.html": "Assessment Link & Login Credentials | TAM – Digital Banking | 28 February",
     "thank_you_email_template.html": "Tank you message ",
-    "testing.html": "Tank you message "
+    "testing.html": "Tank you message ",
+    "east_delta_university_selection_email.html": "Online Assessment for Campus Recruitment at East Delta University for Retail Distribution",
+    "online_assessment_link_for_campus_recruitment_program_at_east_delta_university.html": "Online Assessment Link for Campus Recruitment Program at East Delta University.",
+    "22_july_city_bank_exam_generic_email.html": "Subject: City Bank PLC | Online Assessment Invitation – Recruitment for Retail Distribution ",
+    "link_email_for_city_bank_22.html": "Subject: City Bank PLC | Online Assessment link – Recruitment for Retail Distribution ",
+    "prerona_management_trainee_officer_hiring_for_rmg_apparel_factories.html": "PRERONA: Management Trainee Officer Hiring for RMG/Apparel Factories"
   },
   "pinned_template": "general_template.html",
   "pinned_subject": "Assessment Link & Login Credentials | TAM – Digital Banking | 28 February"
