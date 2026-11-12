@@ -94,6 +94,42 @@ class APIClient:
             return False, {}, f"Unexpected error: {str(e)}"
 
     @staticmethod
+    def _clean_link(link):
+        """Fix double-slash in the path part of a URL (keeps the scheme's //)."""
+        if isinstance(link, str) and '://' in link:
+            parts = link.split('://', 1)
+            if len(parts) == 2:
+                parts[1] = parts[1].replace('//', '/')
+                link = '://'.join(parts)
+        return link
+
+    @staticmethod
+    def _build_lookups(api_response: Dict) -> Tuple[Dict, Dict, Dict]:
+        """
+        Index an API response by lowercase email.
+
+        Returns: (link_lookup, error_lookup, program_info)
+        """
+        response_data = api_response.get('data', {})
+        generated_links = response_data.get('generated_links', [])
+        program_info = response_data.get('program_info', {})
+        api_errors = response_data.get('errors', [])
+
+        error_lookup = {}
+        for err in api_errors:
+            err_email = err.get('email', '').strip().lower()
+            if err_email:
+                error_lookup[err_email] = err.get('error', 'Unknown error')
+
+        link_lookup = {}
+        for link_entry in generated_links:
+            email_key = link_entry.get('email', '').strip().lower()
+            if email_key:
+                link_lookup[email_key] = link_entry
+
+        return link_lookup, error_lookup, program_info
+
+    @staticmethod
     def map_links_to_students(students: List[Dict], api_response: Dict) -> Tuple[List[Dict], List[Dict]]:
         """
         Map generated links back to student data.
@@ -103,29 +139,10 @@ class APIClient:
             - successful_students: students with valid links (will receive emails)
             - failed_candidates: students the API couldn't find (no email sent)
         """
-        response_data = api_response.get('data', {})
-        generated_links = response_data.get('generated_links', [])
-        program_info = response_data.get('program_info', {})
-        api_errors = response_data.get('errors', [])
+        link_lookup, error_lookup, program_info = APIClient._build_lookups(api_response)
 
         program_name = program_info.get('program_name', 'N/A')
         round_name = program_info.get('round_name', 'N/A')
-
-        # Build a set of failed emails from API errors
-        failed_emails = set()
-        error_lookup = {}
-        for err in api_errors:
-            err_email = err.get('email', '').strip().lower()
-            if err_email:
-                failed_emails.add(err_email)
-                error_lookup[err_email] = err.get('error', 'Unknown error')
-
-        # Build a lookup by email for generated links
-        link_lookup = {}
-        for link_entry in generated_links:
-            email_key = link_entry.get('email', '').strip().lower()
-            if email_key:
-                link_lookup[email_key] = link_entry
 
         successful_students = []
         failed_candidates = []
@@ -134,7 +151,7 @@ class APIClient:
             email = student['email'].strip().lower()
 
             # Check if this email failed in the API
-            if email in failed_emails:
+            if email in error_lookup:
                 failed_candidates.append({
                     'name': student['name'],
                     'email': student['email'],
@@ -153,22 +170,20 @@ class APIClient:
                 })
                 continue
 
-            # Fix double-slash in login_link URL
-            login_link = link_data.get('login_link', link_data.get('link', 'N/A'))
-            if isinstance(login_link, str) and '://' in login_link:
-                parts = login_link.split('://', 1)
-                if len(parts) == 2:
-                    parts[1] = parts[1].replace('//', '/')
-                    login_link = '://'.join(parts)
+            login_link = APIClient._clean_link(link_data.get('login_link', link_data.get('link', 'N/A')))
 
             enriched_student = {
                 'name': student['name'],
                 'email': student['email'],
                 'candidate_id': link_data.get('candidate_id', 'N/A'),
                 'login_link': login_link,
+                'link_1': login_link,
+                'link_2': '',
                 'expires_at': APIClient._format_expires_at(link_data.get('expires_at', 'N/A')),
+                'expires_at_2': '',
                 'program_name': program_name,
                 'round_name': round_name,
+                'round_name_2': '',
                 'login_id': student.get('login_id', ''),
                 'password': student.get('password', ''),
                 'email_status': 'pending',
@@ -176,3 +191,44 @@ class APIClient:
             successful_students.append(enriched_student)
 
         return successful_students, failed_candidates
+
+    @staticmethod
+    def merge_second_round(students_with_links: List[Dict], api_response: Dict) -> Tuple[List[Dict], List[Dict]]:
+        """
+        Add Round 2 links (link_2) onto students that already have a Round 1 link.
+
+        Students are never dropped: if Round 2 has no link for a student, link_2
+        stays blank and the student is reported in round2_failed.
+
+        Returns:
+            (students, round2_failed)
+        """
+        link_lookup, error_lookup, program_info = APIClient._build_lookups(api_response)
+        round_name_2 = program_info.get('round_name', '')
+
+        merged = []
+        round2_failed = []
+
+        for student in students_with_links:
+            student = dict(student)
+            email = student['email'].strip().lower()
+            link_data = link_lookup.get(email, {})
+            link_2 = link_data.get('login_link', link_data.get('link', '')) if link_data else ''
+
+            if email in error_lookup or not link_2 or link_2 == 'N/A':
+                student['link_2'] = ''
+                student['round_name_2'] = ''
+                student['expires_at_2'] = ''
+                round2_failed.append({
+                    'name': student['name'],
+                    'email': student['email'],
+                    'error': error_lookup.get(email, 'No Round 2 link generated (email not matched)'),
+                })
+            else:
+                student['link_2'] = APIClient._clean_link(link_2)
+                student['round_name_2'] = round_name_2
+                student['expires_at_2'] = APIClient._format_expires_at(link_data.get('expires_at', ''))
+
+            merged.append(student)
+
+        return merged, round2_failed

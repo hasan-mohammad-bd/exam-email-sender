@@ -34,6 +34,7 @@ class Config:
     # Default Values
     DEFAULT_PROGRAM_ID = _get_config('DEFAULT_PROGRAM_ID', '')
     DEFAULT_ROUND_ID = _get_config('DEFAULT_ROUND_ID', '')
+    DEFAULT_ROUND_ID_2 = _get_config('DEFAULT_ROUND_ID_2', '')
     DEFAULT_SESSION_TIME = _get_config('DEFAULT_SESSION_TIME', '730h')
 
     # Email Sending Configuration

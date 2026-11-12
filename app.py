@@ -73,6 +73,10 @@ def init_session_state():
         'email_subject': 'Assessment Link & Login Credentials | TAM – Digital Banking | 28 February',
         'program_id': int(Config.DEFAULT_PROGRAM_ID) if Config.DEFAULT_PROGRAM_ID else 1,
         'round_id': int(Config.DEFAULT_ROUND_ID) if Config.DEFAULT_ROUND_ID else 1,
+        # Optional second API call (Round 2) -> {link_2}
+        'enable_round_2': False,
+        'round_id_2': int(Config.DEFAULT_ROUND_ID_2) if Config.DEFAULT_ROUND_ID_2 else 1,
+        'round2_failed': [],
         'session_time': Config.DEFAULT_SESSION_TIME or '730h',
         'custom_program_name': '',
         'sender_email': Config.SENDER_EMAIL,
@@ -128,7 +132,7 @@ st.session_state.skip_link_generation = skip_link_generation
 if skip_link_generation:
     st.info("ℹ️ **General Email Mode** — Login link generation will be skipped. "
             "You can send emails directly after uploading data and setting up the template. "
-            "Placeholders like `{login_link}`, `{candidate_id}`, `{round_name}`, and `{expires_at}` will be empty.")
+            "Placeholders like `{login_link}`, `{link_1}`, `{link_2}`, `{candidate_id}`, `{round_name}`, and `{expires_at}` will be empty.")
 
 st.markdown("---")
 
@@ -188,6 +192,23 @@ with tab1:
             help="The round ID for link generation"
         )
         st.session_state.round_id = round_id
+
+        enable_round_2 = st.checkbox(
+            "Also generate a second link (Round 2)",
+            value=st.session_state.enable_round_2,
+            help="Calls the API a second time with a different Round ID. "
+                 "Use {link_1} and {link_2} in the template to include both links in the same email."
+        )
+        st.session_state.enable_round_2 = enable_round_2
+
+        if enable_round_2:
+            round_id_2 = st.number_input(
+                "Round 2 ID *",
+                min_value=1,
+                value=st.session_state.round_id_2,
+                help="The round ID for the second link ({link_2}). Program ID and Session Time are shared."
+            )
+            st.session_state.round_id_2 = round_id_2
 
         session_time = st.text_input(
             "Session Time *",
@@ -279,6 +300,8 @@ with tab1:
         st.markdown(f"- **API Endpoint:** `{api_endpoint}`")
         st.markdown(f"- **Program ID:** `{program_id}`")
         st.markdown(f"- **Round ID:** `{round_id}`")
+        if enable_round_2:
+            st.markdown(f"- **Round 2 ID:** `{st.session_state.round_id_2}`")
         st.markdown(f"- **Session Time:** `{session_time}`")
     with config_col2:
         st.markdown(f"- **AWS Region:** `{aws_region}`")
@@ -655,6 +678,7 @@ if tab3 is not None:
             - Endpoint: `{st.session_state.api_endpoint}`
             - Program ID: `{st.session_state.program_id}`
             - Round ID: `{st.session_state.round_id}`
+            - Round 2 ID: `{st.session_state.round_id_2 if st.session_state.enable_round_2 else 'Disabled'}`
             - Session Time: `{st.session_state.session_time}`
             """)
 
@@ -685,8 +709,36 @@ if tab3 is not None:
                         st.session_state.students,
                         response_data
                     )
+                    round2_failed = []
+
+                    # ── Optional Round 2: second link for the same students ──
+                    if st.session_state.enable_round_2 and students_with_links:
+                        with st.spinner("Generating Round 2 links..."):
+                            success_2, response_data_2, error_msg_2 = api_client.generate_links(
+                                emails=emails,
+                                program_id=st.session_state.program_id,
+                                round_id=st.session_state.round_id_2,
+                                session_time=st.session_state.session_time
+                            )
+
+                        if success_2:
+                            with st.expander("🔍 Raw Round 2 API Response (Debug)"):
+                                st.json(response_data_2)
+                            students_with_links, round2_failed = APIClient.merge_second_round(
+                                students_with_links,
+                                response_data_2
+                            )
+                        else:
+                            st.warning(f"⚠️ Round 2 link generation failed: {error_msg_2}. "
+                                       "Emails will be sent with link_1 only.")
+                            round2_failed = [
+                                {'name': s['name'], 'email': s['email'], 'error': error_msg_2}
+                                for s in students_with_links
+                            ]
+
                     st.session_state.students_with_links = students_with_links
                     st.session_state.failed_candidates = failed_candidates
+                    st.session_state.round2_failed = round2_failed
                     st.session_state.links_generated = True
 
                     # ── Successful candidates (will receive emails) ──
@@ -724,7 +776,26 @@ if tab3 is not None:
                             mime="text/csv",
                             key="download_failed"
                         )
+
+                    # ── Round 2 failures (email still sent, link_2 blank) ──
+                    if round2_failed:
+                        st.markdown("---")
+                        st.subheader("⚠️ Round 2 Link Failures (Email Will Be Sent Without link_2)")
+                        st.warning(f"{len(round2_failed)} candidate(s) did not get a Round 2 link. "
+                                   "They will still receive the email with `{link_2}` left blank.")
+
+                        round2_failed_df = pd.DataFrame(round2_failed)
+                        st.dataframe(round2_failed_df, use_container_width=True, height=300)
+
+                        st.download_button(
+                            label="📥 Download Round 2 Failures CSV",
+                            data=round2_failed_df.to_csv(index=False),
+                            file_name=f"round2_failed_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime="text/csv",
+                            key="download_round2_failed"
+                        )
                 else:
+                    st.session_state.round2_failed = []
                     st.error(f"❌ Failed to generate links: {error_msg}")
 
             # Show previously generated links
@@ -740,6 +811,12 @@ if tab3 is not None:
                     st.subheader("🚫 Previously Failed Candidates")
                     failed_df = pd.DataFrame(st.session_state.failed_candidates)
                     st.dataframe(failed_df, use_container_width=True, height=200)
+
+                if st.session_state.round2_failed:
+                    st.markdown("---")
+                    st.subheader("⚠️ Previous Round 2 Link Failures")
+                    round2_failed_df = pd.DataFrame(st.session_state.round2_failed)
+                    st.dataframe(round2_failed_df, use_container_width=True, height=200)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -988,9 +1065,13 @@ with tab5:
                     'email': s['email'],
                     'candidate_id': '',
                     'login_link': '',
+                    'link_1': '',
+                    'link_2': '',
                     'expires_at': '',
+                    'expires_at_2': '',
                     'program_name': st.session_state.custom_program_name or '',
                     'round_name': '',
+                    'round_name_2': '',
                     'login_id': s.get('login_id', ''),
                     'password': s.get('password', ''),
                     'email_status': 'pending',
@@ -1144,7 +1225,10 @@ with tab5:
             if st.session_state.skip_link_generation:
                 preview_df = pd.DataFrame(students_to_email)[['name', 'email']]
             else:
-                preview_df = pd.DataFrame(students_to_email)[['name', 'email', 'candidate_id', 'login_link']]
+                preview_cols = ['name', 'email', 'candidate_id', 'link_1']
+                if any(s.get('link_2') for s in students_to_email):
+                    preview_cols.append('link_2')
+                preview_df = pd.DataFrame(students_to_email).reindex(columns=preview_cols)
             st.dataframe(preview_df, use_container_width=True)
 
         st.markdown("---")
