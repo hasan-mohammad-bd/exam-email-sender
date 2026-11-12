@@ -376,10 +376,14 @@ class TemplateManager:
                 {'placeholder': '{name}', 'description': 'Student name'},
                 {'placeholder': '{email}', 'description': 'Student email'},
                 {'placeholder': '{login_link}', 'description': 'Unique login URL'},
+                {'placeholder': '{link_1}', 'description': 'Round 1 login URL (same as {login_link})'},
+                {'placeholder': '{link_2}', 'description': 'Round 2 login URL (blank if not generated)'},
                 {'placeholder': '{candidate_id}', 'description': 'Candidate ID'},
                 {'placeholder': '{program_name}', 'description': 'Program name'},
                 {'placeholder': '{round_name}', 'description': 'Round name'},
+                {'placeholder': '{round_name_2}', 'description': 'Round 2 name'},
                 {'placeholder': '{expires_at}', 'description': 'Link expiry time'},
+                {'placeholder': '{expires_at_2}', 'description': 'Round 2 link expiry time'},
                 {'placeholder': '{session_duration}', 'description': 'Session duration'},
             ]
 
@@ -402,10 +406,14 @@ class TemplateManager:
                 'name': 'John Doe',
                 'email': 'john.doe@example.com',
                 'login_link': '',
+                'link_1': '',
+                'link_2': '',
                 'candidate_id': '',
                 'program_name': 'General Announcement',
                 'round_name': '',
+                'round_name_2': '',
                 'expires_at': '',
+                'expires_at_2': '',
                 'session_duration': '',
             }
         else:
@@ -413,10 +421,14 @@ class TemplateManager:
                 'name': 'John Doe',
                 'email': 'john.doe@example.com',
                 'login_link': 'https://exam-portal.example.com/login/abc123',
+                'link_1': 'https://exam-portal.example.com/login/abc123',
+                'link_2': 'https://exam-portal.example.com/login/def456',
                 'candidate_id': '12345',
                 'program_name': 'Software Engineering Assessment',
                 'round_name': 'Technical Round 1',
+                'round_name_2': 'Technical Round 2',
                 'expires_at': '2026-03-17 23:59:59',
+                'expires_at_2': '2026-03-17 23:59:59',
                 'session_duration': '730h',
             }
 

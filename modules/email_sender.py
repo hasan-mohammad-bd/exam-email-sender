@@ -518,10 +518,14 @@ class EmailSender:
             '{name}': str(data.get('name', '')),
             '{email}': str(data.get('email', '')),
             '{login_link}': str(data.get('login_link', '')),
+            '{link_1}': str(data.get('link_1') or data.get('login_link', '')),
+            '{link_2}': str(data.get('link_2', '')),
             '{candidate_id}': str(data.get('candidate_id', '')),
             '{program_name}': str(data.get('program_name', '')),
             '{round_name}': str(data.get('round_name', '')),
+            '{round_name_2}': str(data.get('round_name_2', '')),
             '{expires_at}': str(data.get('expires_at', '')),
+            '{expires_at_2}': str(data.get('expires_at_2', '')),
             '{session_duration}': str(data.get('session_duration', '')),
             '{login_id}': str(data.get('login_id', '')),
             '{password}': str(data.get('password', '')),
@@ -531,13 +535,14 @@ class EmailSender:
         for placeholder, value in replacements.items():
             result = result.replace(placeholder, value)
 
-        # Add ses:no-track to <a> tags containing the login_link to prevent
-        # AWS SES click tracking from rewriting the URL
-        login_link = str(data.get('login_link', ''))
-        if login_link:
-            result = result.replace(
-                f'<a href="{login_link}"',
-                f'<a ses:no-track href="{login_link}"'
-            )
+        # Add ses:no-track to <a> tags containing the login links to prevent
+        # AWS SES click tracking from rewriting the URLs
+        links = {str(data.get(k) or '') for k in ('login_link', 'link_1', 'link_2')}
+        for link in links:
+            if link:
+                result = result.replace(
+                    f'<a href="{link}"',
+                    f'<a ses:no-track href="{link}"'
+                )
 
         return result

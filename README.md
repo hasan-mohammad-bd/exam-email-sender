@@ -68,10 +68,14 @@ Your file must include these columns:
 | `{name}`           | Student name          |
 | `{email}`          | Student email         |
 | `{login_link}`     | Unique login URL      |
+| `{link_1}`         | Round 1 login URL (same as `{login_link}`) |
+| `{link_2}`         | Round 2 login URL (optional; blank if Round 2 is off) |
 | `{candidate_id}`   | Candidate ID          |
 | `{program_name}`   | Program name          |
 | `{round_name}`     | Round name            |
+| `{round_name_2}`   | Round 2 name          |
 | `{expires_at}`     | Link expiry time      |
+| `{expires_at_2}`   | Round 2 link expiry time |
 | `{session_duration}`| Session duration      |
 
 ## Project Structure
